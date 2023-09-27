@@ -1,0 +1,7 @@
+.vscode
+build
+data
+model
+lib
+onnxruntime
+__pycache__
