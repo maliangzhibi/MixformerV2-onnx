@@ -109,7 +109,7 @@ int main(int argc, char** argv)
     }
 
     // Get model path.
-    const char* model_path = argv[1]; // Mixformer-mnn/model/Mixformer-bit8.mnn";
+    const char* model_path = argv[1]; // Mixformer-onnx/model/mixformer_v2.onnx";
 
     // Get video path.
     const char* video_path = argv[2]; 
