@@ -4,6 +4,6 @@ data
 model
 lib
 onnxruntime
-mixformer-pytrt
+# mixformer-pytrt
 __pycache__
 *.mp4

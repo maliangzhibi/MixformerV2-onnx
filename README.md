@@ -3,6 +3,9 @@ MixFormerV2: Efficient Fully Transformer Tracking.
 
 [official pytorch](https://github.com/MCG-NJU/MixFormerV2.git)
 
+Here, the c++ version of onnx mixformerv2 tracking algorithm is provided, and the fps reaches about 300fps on the 3080-laptop gpu.
+
+At the same time, a pytrt version was also provided, which reached 430fps on the 3080-laptop gpu.
 # 0. Download model
 [mixformer_v2.onnx model](https://www.123pan.com/s/6iArVv-FYAJ.html)
 # 1. How to build and run it?
