@@ -4,7 +4,7 @@ MixFormerV2: Efficient Fully Transformer Tracking.
 [official pytorch](https://github.com/MCG-NJU/MixFormerV2.git)
 
 # 0. Download model
-[mixformerv2 model](https://www.123pan.com/s/6iArVv-FYAJ.html)
+[mixformer_v2.onnx model](https://www.123pan.com/s/6iArVv-FYAJ.html)
 # 1. How to build and run it?
 
 ## modify your own CMakeList.txt
