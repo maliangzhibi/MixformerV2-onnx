@@ -12,9 +12,9 @@ project(mixformer-onnx)
 
 set(CMAKE_CXX_STANDARD 14)
 
-include_directories(${PROJECT_SOURCE_DIR} /usr/include/opencv4 /home/nhy/lsm/code/onnxruntime)
+include_directories(${PROJECT_SOURCE_DIR} /usr/include/opencv4 /home/code/onnxruntime)
 
-link_directories(/usr/lib/x86_64-linux-gnu /home/nhy/lsm/code/onnxruntime/build/Linux/Release)
+link_directories(/usr/lib/x86_64-linux-gnu /home/code/onnxruntime/build/Linux/Release)
 
 add_executable(mixformer-onnx main.cpp mixformer_onnx.cpp mixformer_onnx.h)
 
