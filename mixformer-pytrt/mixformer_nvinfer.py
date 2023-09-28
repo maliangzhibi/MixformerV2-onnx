@@ -25,7 +25,7 @@ ENGINE_TYPE=['Mixformer']
 
 
 class MixformerNvinfer:
-    """该类进行ET.Tracker
+    """Mixformer Nvinfer
     """
     def __init__(self, engine_type="Mixformer", engine_name="Mixformer") -> None:
 
