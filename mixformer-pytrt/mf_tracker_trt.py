@@ -10,6 +10,12 @@ import torch
 import torch.nn.functional as F
 import math
 
+# prj_path = os.path.join(os.path.dirname(__file__), '..')
+# if prj_path not in sys.path:
+#     sys.path.append(prj_path)
+
+from mixformer_nvinfer import MixformerNvinfer
+
 prj_path = os.path.join(os.path.dirname(__file__), '..')
 if prj_path not in sys.path:
     sys.path.append(prj_path)
@@ -66,13 +72,9 @@ class Preprocessor_wo_mask(object):
 class MFTrackerORT:
     def __init__(self) -> None:
         self.debug = True
-        self.gpu_id = 0
-        self.providers = ["CUDAExecutionProvider"]
-        self.provider_options = [{"device_id": str(self.gpu_id)}]
-        self.model_path = "model/mixformer_v2.onnx"
+        self.mixformer_tracker = MixformerNvinfer()
         self.video_name = "/home/nhy/lsm/dataset/person2.mp4"
         
-        self.init_track_net()
         self.preprocessor = Preprocessor_wo_mask()
         self.max_score_decay = 1.0
         self.search_factor = 4.5
@@ -81,11 +83,6 @@ class MFTrackerORT:
         self.template_size = 112
         self.update_interval = 200
         self.online_size = 1
-
-    def init_track_net(self):
-        """使用设置的参数初始化tracker网络
-        """
-        self.ort_session = onnxruntime.InferenceSession(self.model_path, providers=self.providers, provider_options=self.provider_options)
 
     def track_init(self, frame, target_pos=None, target_sz = None):
         """使用第一帧进行初始化
@@ -125,16 +122,13 @@ class MFTrackerORT:
                                                                 output_sz=self.search_size)  # (x1, y1, w, h)
         search = self.preprocessor.process(x_patch_arr)
 
-        # compute ONNX Runtime output prediction
-        ort_inputs = {'img_t': self.to_numpy(self.template), 'img_ot': self.to_numpy(self.online_template), 'img_search': self.to_numpy(search)}
+        # compute trt output prediction
+        trt_outputs = self.mixformer_tracker.infer(self.template, self.online_template, search)
 
-        ort_outs = self.ort_session.run(None, ort_inputs)
+        pred_boxes = trt_outputs[0]
+        pred_score = trt_outputs[1]
 
-        # pred_boxes = torch.from_numpy(ort_outs[0]).view(-1, 4)
-        # pred_score = torch.from_numpy(ort_outs[1]).view(1).sigmoid().item()
-        pred_boxes = torch.from_numpy(ort_outs[0])
-        pred_score = torch.from_numpy(ort_outs[1])
-        # print(f">>> box and score: {pred_boxes}  {pred_score}")
+        # print(f">>> self.template.data_ptr: {self.template.data_ptr()}")
         # Baseline: Take the mean of all pred boxes as the final result
         pred_box = (pred_boxes.mean(dim=0) * self.search_size / resize_factor).tolist()  # (cx, cy, w, h) [0,1]
         # get the final box result
@@ -282,7 +276,7 @@ if __name__ == '__main__':
     frame_id = 0
     total_time = 0
     for frame in get_frames(Tracker.video_name):
-        print(f"frame shape {frame.shape}")
+        # print(f"frame shape {frame.shape}")
         tic = cv2.getTickCount()
         if first_frame:
             x, y, w, h = cv2.selectROI(video_name, frame, fromCenter=False)

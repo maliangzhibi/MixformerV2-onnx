@@ -58,8 +58,8 @@ class MixformerNvinfer:
         self.context = self.model.create_execution_context()
         self.bindings = OrderedDict()
         self.output_names = []
-        # self.fp16 = False
-        # self.dynamic = False
+        self.fp16 = False
+        self.dynamic = False
 
         for i in range(self.model.num_bindings):
             name = self.model.get_binding_name(i)
@@ -67,14 +67,12 @@ class MixformerNvinfer:
             LOGGER.info(f"name: {name}")
             # input
             if self.model.binding_is_input(i): 
-                # print(f">>>input name: {name} {self.model.get_binding_shape(i)} {dtype}")
                 if -1 in tuple(self.model.get_binding_shape(i)):
                     dynamic = True
                     self.context.set_binding_shape(i, tuple(self.model.get_profile_shape(0,1)[2]))
                 if dtype == np.float16:
                     fp16 = True
             else:# output
-                # print(f">>>output name: {name} {self.model.get_binding_shape(i)} {dtype}")
                 self.output_names.append(name)
 
             shape = tuple(self.context.get_binding_shape(i))
@@ -99,15 +97,41 @@ class MixformerNvinfer:
         Returns:
             _type_: _description_
         """
-        print(f">>> img_t data_ptr: {im.data_ptr()} {int(im_0.data_ptr())} {int(im_1.data_ptr())}") # ==
+        # 通过bindings获取绑定的输入形状
+        if self.dynamic and im.shape != self.bindings['img_t'].shape and im_0.shape != self.bindings['img_ot'] and im_1.shape != self.bindings['img_search'].shape:
+            print("dinamic im shape")
+            i = self.model.get_binding_index('img_t')
+            oi = self.model.get_binding_index('img_ot')
+            j = self.model.get_binding_index('img_search')
+
+            self.context.set_binding_shape(i, im.shape)  # reshape if dynamic
+            self.context.set_binding_shape(oi, im_0.shape)
+            self.context.set_binding_shape(j, im_1.shape)  # reshape if dynamic
+
+            self.bindings['img_t'] = self.bindings['img_search']._replace(shape=im.shape)
+            self.bindings['img_ot'] = self.bindings['img_search']._replace(shape=im_0.shape)
+            self.bindings['img_search'] = self.bindings['img_search']._replace(shape=im_1.shape)
+            for name in self.output_names:
+                i = self.model.get_binding_index(name)
+                self.bindings[name].data.resize_(tuple(self.context.get_binding_shape(i)))
+
+        s = self.bindings['img_t'].shape
+        os = self.bindings['img_ot'].shape
+        s1 = self.bindings['img_search'].shape
+
+        # 判断实际输入的形状是否符合预先绑定的形状
+        assert im.shape == s, f"input size {im.shape} {'>' if self.dynamic else 'not equal to'} max model size {s}"
+        assert im_0.shape == os, f"input size {im_0.shape} {'>' if self.dynamic else 'not equal to'} max model size {os}"
+        assert im_1.shape == s1, f"input size {im_1.shape} {'>' if self.dynamic else 'not equal to'} max model size {s1}"
+
         # 将实际输入的图像地址取出，并赋值给binding_addr
         self.binding_addrs['img_t'] = int(im.data_ptr())
         self.binding_addrs['img_ot'] = int(im_0.data_ptr())
         self.binding_addrs['img_search'] = int(im_1.data_ptr())
-        print(f">>> img_t data_ptr1: {list(self.binding_addrs.values())}")
+
         # 将绑定的地址地址传递给context，使用execute_v2进行推理，推理结果就会保存在对应的地址中，通过访问对应地址的数据就能得到输出
         self.context.execute_v2(list(self.binding_addrs.values()))
-        y = [self.bindings[x].data for x in self.output_names]
+        y = [self.bindings[x].data for x in sorted(self.output_names)]
 
         # print(f">>>y : {y}")
         if isinstance(y, (list, tuple)):
