@@ -5,3 +5,4 @@ model
 lib
 onnxruntime
 __pycache__
+*.mp4
