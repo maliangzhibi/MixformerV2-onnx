@@ -46,13 +46,16 @@ void track(Mixformer *tracker, const char *video_path)
     std::cout << "==========================" << std::endl;
     std::cout << "Init done!" << std::endl;
     std::cout << std::endl;
+
+    int frame_id = 0;
+    double avg_fps = 0.f;
     for (;;)
     {
         // Read a new frame.
         capture >> frame;
         if (frame.empty())
             break;
-
+        frame_id += 1;
         // Start timer
         double t = (double)cv::getTickCount();
 
@@ -61,6 +64,7 @@ void track(Mixformer *tracker, const char *video_path)
 
         // Calculate Frames per second (FPS)
         double fps = cv::getTickFrequency() / ((double)cv::getTickCount() - t);
+        avg_fps += fps;
 
         // Result to rect.
         cv::Rect rect;
@@ -95,6 +99,7 @@ void track(Mixformer *tracker, const char *video_path)
             break;
         }
     }
+    std::cout << "AVG_FPS: " << avg_fps / frame_id << std::endl;
     cv::destroyWindow("demo");
     capture.release();
 }
