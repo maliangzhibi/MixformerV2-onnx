@@ -17,23 +17,6 @@
     double time_ms;
 #endif
 
-
-// static std::vector<float> hann(int sz) {
-std::vector<float> Mixformer::hann(int sz) {
-    std::vector<float> hann1d(sz);
-    std::vector<float> hann2d(sz * sz);
-    for (int i = 1; i < sz + 1; i++) {
-        float w = 0.5f - 0.5f * std::cos(2 * 3.1415926535898f * i / (sz+1) );
-        hann1d[i-1] = w;
-    }
-    for (int i = 0; i < sz; i++) {
-        for (int j=0; j < sz; j++) {
-            hann2d[i*sz + j] = hann1d[i] * hann1d[j];
-        }
-    }
-   return hann2d;
-}
-
 // put z and x into transform
 std::vector<Ort::Value>  Mixformer::transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x)
 {
@@ -367,8 +350,6 @@ Mixformer::Mixformer(const std::string &_onnx_path, unsigned int _num_threads):
   OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 0); // C API stable.
 #endif
   ort_session = new Ort::Session(ort_env, onnx_path, session_options);
-  // Generate hann2d window.
-  this->cfg.window = hann(this->cfg.feat_sz);
 }
 
 Mixformer::~Mixformer()

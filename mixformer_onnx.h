@@ -31,8 +31,7 @@ struct DrOBB {
 };
 
 struct Config {
-    std::vector<float> window;
-
+    // std::vector<float> window;
     float template_factor = 2.0;
     float search_factor = 4.5; // 5.0
     float template_size = 112; //192
@@ -115,8 +114,6 @@ private:
     void sample_target(const cv::Mat &im, cv::Mat &croped, DrBBox target_bb, float search_area_factor, int output_sz, float &resize_factor);
 
 public:
-    
-    std::vector<float> hann(int sz);
 
     Ort::Value create_tensor(const cv::Mat &mat, const std::vector<int64_t> &tensor_dims,
                             const Ort::MemoryInfo &memory_info_handler,
