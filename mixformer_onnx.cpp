@@ -35,17 +35,20 @@ std::vector<float> Mixformer::hann(int sz) {
 }
 
 // put z and x into transform
-std::vector<Ort::Value>  Mixformer::transform(const cv::Mat &mat_z, const cv::Mat &mat_x)
+std::vector<Ort::Value>  Mixformer::transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x)
 {
     cv::Mat z = mat_z.clone();
+    cv::Mat oz = mat_oz.clone();
     cv::Mat x = mat_x.clone();
 
     cv::cvtColor(z, z, cv::COLOR_BGR2RGB);
+    cv::cvtColor(oz, oz, cv::COLOR_BGR2RGB);
     cv::cvtColor(x, x, cv::COLOR_BGR2RGB);
     // z.convertTo(z, CV_32FC3, 1. / 255.f, 0.f);
     // x.convertTo(x, CV_32FC3, 1. / 255.f, 0.f);
     
     this->normalize_inplace(z, means, norms); // float32
+    this->normalize_inplace(oz, means, norms); // float32
     this->normalize_inplace(x, means, norms); // float32
 
     std::vector<Ort::Value> input_tensors;
@@ -55,7 +58,11 @@ std::vector<Ort::Value>  Mixformer::transform(const cv::Mat &mat_z, const cv::Ma
         input_value_handler_z, CHW));
 
     input_tensors.emplace_back(this->create_tensor(
-        x, input_node_dims.at(1), memory_info_handler,
+        oz, input_node_dims.at(1), memory_info_handler,
+        input_value_handler_oz, CHW));
+
+    input_tensors.emplace_back(this->create_tensor(
+        x, input_node_dims.at(2), memory_info_handler,
         input_value_handler_x, CHW));
 
     return input_tensors;
@@ -68,6 +75,7 @@ void Mixformer::init(const cv::Mat &img, DrOBB bbox)
     float resize_factor = 1.f;
     this->sample_target(img, z_patch, bbox.box, this->cfg.template_factor, this->cfg.template_size, resize_factor);
     this->z_patch = z_patch;
+    this->oz_patch = z_patch;
     this->state = bbox.box;
 }
 
@@ -76,78 +84,65 @@ const DrOBB &Mixformer::track(const cv::Mat &img)
     // if (img.empty()) return;
     // get subwindow
     cv::Mat x_patch;
+    this->frame_id += 1;
     float resize_factor = 1.f;
     this->sample_target(img, x_patch, this->state, this->cfg.search_factor, this->cfg.search_size, resize_factor);
 
     // preprocess input tensor
-    std::vector<Ort::Value> input_tensor_xz = this->transform(this->z_patch, x_patch);
+    std::vector<Ort::Value> input_tensor_xz = this->transform(this->z_patch, this->oz_patch, x_patch);
     // std::cout << "开始跟踪1: " << input_tensor_xz.size()<< std::endl;
     // inference score， size  and offsets
     std::vector<Ort::Value> output_tensors = ort_session->Run(
         Ort::RunOptions{nullptr}, input_node_names.data(),
-        input_tensor_xz.data(), 2, output_node_names.data(), 3
+        input_tensor_xz.data(), 3, output_node_names.data(), 2
     );
     // std::cout << "开始跟踪2: " << std::endl;
     DrBBox pred_box;
-    float max_score;
-    this->cal_bbox(output_tensors, pred_box, max_score, resize_factor);
+    float pred_score;
+    this->cal_bbox(output_tensors, pred_box, pred_score, resize_factor);
     
     this->map_box_back(pred_box, resize_factor);
     this->clip_box(pred_box, img.rows, img.cols, 10);
     
     object_box.box = pred_box;
     object_box.class_id = 0;
-    object_box.score = max_score;
+    object_box.score = pred_score;
 
     this->state = object_box.box;
+
+    this->max_pred_score = this->max_pred_score * this->max_score_decay;
+    // update template
+    if (pred_score > 0.5 && pred_score > this->max_pred_score)
+    {
+      this->sample_target(img, this->max_oz_patch, this->state, this->cfg.template_factor, this->cfg.template_size, resize_factor);
+      this->max_pred_score = pred_score;
+
+    }
+
+    if (this->frame_id % this->cfg.update_interval == 0)
+    {
+      this->oz_patch = this->max_oz_patch;
+      this->max_pred_score = -1;
+      this->max_oz_patch = this->oz_patch;
+    }
 
     return object_box;
 }
 
 // calculate bbox
 void Mixformer::cal_bbox(std::vector<Ort::Value> &output_tensors, DrBBox &pred_box, float &max_score, float resize_factor) {
-    Ort::Value &sizes_tensor = output_tensors.at(0); // (1,1,16,16)
-    Ort::Value &scores_tensor = output_tensors.at(1); // (1,2,16,16)
-    Ort::Value &offsets_tensor = output_tensors.at(2); // (1,2,16,16)
+    Ort::Value &boxes_tensor = output_tensors.at(0); // (1，1，4)
+    Ort::Value &scores_tensor = output_tensors.at(1); // (1)
 
-    auto scores_dims = scores_tensor.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    auto sizes_dims = sizes_tensor.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    auto offsets_dims = offsets_tensor.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    
-    const unsigned int scores_b = scores_dims.at(0);
-    const unsigned int scores_c = scores_dims.at(1);
-    const unsigned int scores_height = scores_dims.at(2);
-    const unsigned int scores_width = scores_dims.at(3);
-
-    int scores_elem_size = scores_height * scores_width;
-
-    auto scores_ptr = scores_tensor.GetTensorData<float>();
-    // Add hann window, get max value and index.
-    std::cout << "开始跟踪: " << scores_b << " " << scores_c << " " << scores_height << " " << scores_width << " " << scores_elem_size << std::endl;
-    float max_value = this->cfg.window[0] * scores_ptr[0];
-    int max_idx_y = 0; int max_idx_x = 0; int max_idx = 0;
-    float tmp_score = 0.f;
-    for (int i = 0; i < scores_elem_size; i++) {
-        tmp_score = this->cfg.window[i] * scores_ptr[i];
-        if (tmp_score > max_value) {
-            max_idx = i;
-            max_value = tmp_score;
-            // std::cout << "max_value: " << max_value << std::endl;
-        }
-    }
-    
-    max_idx_y = max_idx / scores_width;
-    max_idx_x = max_idx % scores_width;
-    
-    auto sizes_ptr = sizes_tensor.GetTensorData<float>();
-    auto offsets_ptr = offsets_tensor.GetTensorData<float>();
-
-    float cx = (max_idx_x + offsets_ptr[max_idx_y * offsets_dims.at(3) + max_idx_x]) * 1.f / this->cfg.feat_sz;
-    float cy = (max_idx_y + offsets_ptr[offsets_dims.at(3) * offsets_dims.at(2) + max_idx_y * offsets_dims.at(3) + max_idx_x]) *1.f / this->cfg.feat_sz;
-
-    float w = sizes_ptr[max_idx_y * sizes_dims.at(3) + max_idx_x];
-    float h = sizes_ptr[sizes_dims.at(3) * sizes_dims.at(2) + max_idx_y * sizes_dims.at(3) + max_idx_x];
-  
+    auto scores_ptr = scores_tensor.GetTensorData<float>();    
+    auto boxes_ptr = boxes_tensor.GetTensorData<float>();
+    // auto dims = boxes_tensor.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
+    // std::cout << "boxes_shape: " << boxes_ptr[0] << std::endl;
+    auto cx = boxes_ptr[0];
+    auto cy = boxes_ptr[1];
+    auto w = boxes_ptr[2];
+    auto h = boxes_ptr[3];
+    std::cout << "cx cy w h "<< cx << " " << cy << " " << w << " " << h << std::endl;
     cx = cx * this->cfg.search_size / resize_factor;
     cy = cy * this->cfg.search_size / resize_factor;
     w = w * this->cfg.search_size / resize_factor;
@@ -156,9 +151,9 @@ void Mixformer::cal_bbox(std::vector<Ort::Value> &output_tensors, DrBBox &pred_b
     pred_box.x0 = cx - 0.5 * w;
     pred_box.y0 = cy - 0.5 * h;
     pred_box.x1 = pred_box.x0 + w;
-    pred_box.y1 = pred_box.y0 + h;    
+    pred_box.y1 = pred_box.y0 + h;
 
-    max_score = max_value;
+    max_score = scores_ptr[0];
 }
 
 void Mixformer::map_box_back(DrBBox &pred_box, float resize_factor) {
@@ -350,7 +345,7 @@ void Mixformer::normalize_inplace(cv::Mat &mat_inplace, const float mean[3], con
   }
 }
 
-Mixformer::Mixformer(const std::string &_onnx_path, unsigned int _num_threads) :
+Mixformer::Mixformer(const std::string &_onnx_path, unsigned int _num_threads):
     log_id(_onnx_path.data()), num_threads(_num_threads)
 {
 #ifdef LITE_WIN32

@@ -34,11 +34,12 @@ struct Config {
     std::vector<float> window;
 
     float template_factor = 2.0;
-    float search_factor = 4.0; // 5.0
-    float template_size = 128; //192
-    float search_size = 256; // 384
+    float search_factor = 4.5; // 5.0
+    float template_size = 112; //192
+    float search_size = 224; // 384
     float stride = 16;
-    int feat_sz = 16; // 24
+    int feat_sz = 14; // 24
+    int update_interval = 200;
 };
 enum
 {
@@ -56,25 +57,27 @@ public:
     Ort::MemoryInfo memory_info_handler = Ort::MemoryInfo::CreateCpu(
         OrtArenaAllocator, OrtMemTypeDefault);
      // hardcode input node names
-    unsigned int num_inputs = 2;
+    unsigned int num_inputs = 3;
     std::vector<const char *> input_node_names = {
-        "z",
-        "x"
+        "img_t",
+        "img_ot",
+        "img_search"
     };
     // init dynamic input dims
     std::vector<std::vector<int64_t>> input_node_dims = {
-        {1, 3, 128, 128}, // z  (b=1,c,h,w)
-        {1, 3, 256, 256} // x
+        {1, 3, 112, 112}, // z  (b=1,c,h,w)
+        {1, 3, 112, 112}, // z  (b=1,c,h,w)
+        {1, 3, 224, 224} // x
     }; 
     std::vector<float> input_value_handler_z;
+    std::vector<float> input_value_handler_oz;
     std::vector<float> input_value_handler_x;
 
     // hardcode output node names
     unsigned int num_outputs = 3;
     std::vector<const char *> output_node_names = {
-        "size_map",
-        "score_map", 
-        "offset_map"
+        "pred_boxes",
+        "pred_scores"
     };
 
     const char *onnx_path = nullptr;
@@ -82,7 +85,7 @@ public:
     const char *log_id = nullptr;
 
 public:     
-    explicit Mixformer(const std::string &_onnx_path, unsigned int _num_threads = 1);
+    explicit Mixformer(const std::string &_onnx_path, unsigned int _num_threads = 8);
 
     ~Mixformer(); //override
 
@@ -101,7 +104,7 @@ protected:
 
 private:
 
-    std::vector<Ort::Value>  transform(const cv::Mat &mat_z, const cv::Mat &mat_x);
+    std::vector<Ort::Value>  transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x);
 
     void map_box_back(DrBBox &pred_box, float resize_factor);
 
@@ -133,15 +136,19 @@ public:
 private:
     const float means[3]  = {0.406*255, 0.485*255, 0.456*255}; // BGR
     const float norms[3] = {1/(0.225*255), 1/(0.229*255), 1/(0.224*255)}; // BGR
-    // const float mean_vals[3] = {103.53f, 116.28f, 123.675f}; // BGR
-    // const float scale_vals[3] = {0.017429f, 0.017507f, 0.017125f};
+    float max_pred_score = -1.f;
+    float max_score_decay = 1.f;
 
     Ort::Value *x = nullptr;
     Ort::Value *z = nullptr;
+    Ort::Value *oz = nullptr;
 
-    cv::Mat z_patch;
+    cv::Mat z_patch; // template
+    cv::Mat oz_patch; // online_template
+    cv::Mat max_oz_patch; // online max template
 
     DrOBB object_box;
+    int frame_id = 0;
 };
 
 #endif 

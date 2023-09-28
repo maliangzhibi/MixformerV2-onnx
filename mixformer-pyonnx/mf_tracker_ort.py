@@ -24,7 +24,7 @@ def get_frames(video_name):
         _type_: _description_
     """
     if not video_name:
-        rtsp = "rtsp://%s:%s@%s:554/cam/realmonitor?channel=1&subtype=1" % ("admin", "nanhu@2020", "192.168.1.108")
+        rtsp = "rtsp://%s:%s@%s:554/cam/realmonitor?channel=1&subtype=1" % ("admin", "123456", "192.168.1.108")
         cap = cv2.VideoCapture(rtsp) if rtsp else cv2.VideoCapture()
         
         # warmup
@@ -69,8 +69,8 @@ class MFTrackerORT:
         self.gpu_id = 0
         self.providers = ["CUDAExecutionProvider"]
         self.provider_options = [{"device_id": str(self.gpu_id)}]
-        self.model_path = "mixformer_v2_sim.onnx"
-        self.video_name = "/home/nhy/lsm/dataset/person2.mp4"
+        self.model_path = "mixformer_v2.onnx"
+        self.video_name = "/home/user/lsm/dataset/person2.mp4"
         
         self.init_track_net()
         self.preprocessor = Preprocessor_wo_mask()

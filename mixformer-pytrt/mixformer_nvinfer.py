@@ -18,16 +18,16 @@ def get_plugin_names():
     return [pc.name for pc in trt.get_plugin_registry().plugin_creator_list] 
 print('检查注册算子>> ', get_plugin_names())
 
-LOGGING_NAME="OSTrackNvinfer"
+LOGGING_NAME="MixformerNvinfer"
 LOGGER = logging.getLogger(LOGGING_NAME)
 
-ENGINE_TYPE=['ostrack']
+ENGINE_TYPE=['Mixformer']
 
 
-class OSTrackNvinfer:
+class MixformerNvinfer:
     """该类进行ET.Tracker
     """
-    def __init__(self, engine_type="ostrack", engine_name="ostrack-256-ep300") -> None:
+    def __init__(self, engine_type="Mixformer", engine_name="Mixformer") -> None:
 
         # 检查输入的engine_type
         assert engine_type in ENGINE_TYPE, "please check the engine_type whether is in ENGINE_TYPE=['bacbone_neck_x', 'backbone_neck_z', 'featfusor_head']."
@@ -135,7 +135,7 @@ class OSTrackNvinfer:
 
 
 if __name__=="__main__":
-    det = OSTrackNvinfer(ENGINE_TYPE[0])
+    det = MixformerNvinfer(ENGINE_TYPE[0])
 
     input= torch.rand((1, 3, 128, 128)).cuda()
     input1= torch.rand((1, 3, 256, 256)).cuda()

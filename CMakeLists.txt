@@ -8,15 +8,15 @@ set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_CXX_FLAGS "-fPIC -std=c++14")
 set(CMAKE_C_FLAGS "-fPIC -std=c11  -O3 -mavx512f")
 set(CMAKE_BUILD_TYPE "Release")
-project(ostrack-onnx)
+project(mixformer-onnx)
 
 set(CMAKE_CXX_STANDARD 14)
 
-include_directories(${PROJECT_SOURCE_DIR} /usr/include/opencv4 /home/nhy/lsm/code/onnxruntime)
+include_directories(${PROJECT_SOURCE_DIR} /usr/include/opencv4 /home/code/onnxruntime)
 
-link_directories(/usr/lib/x86_64-linux-gnu /home/nhy/lsm/code/onnxruntime/build/Linux/Release)
+link_directories(/usr/lib/x86_64-linux-gnu /home/code/onnxruntime/build/Linux/Release)
 
-add_executable(ostrack-onnx main.cpp ostrack_onnx.cpp ostrack_onnx.h)
+add_executable(mixformer-onnx main.cpp mixformer_onnx.cpp mixformer_onnx.h)
 
-target_link_libraries(ostrack-onnx libonnxruntime.so libopencv_core.so libopencv_highgui.so libopencv_imgproc.so libopencv_video.so libopencv_videoio.so libopencv_imgcodecs.so)
+target_link_libraries(mixformer-onnx libonnxruntime.so libopencv_core.so libopencv_highgui.so libopencv_imgproc.so libopencv_video.so libopencv_videoio.so libopencv_imgcodecs.so)
 

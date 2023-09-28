@@ -2,9 +2,9 @@
 #include <cstdlib>
 #include <string>
 
-#include "ostrack_onnx.h"
+#include "mixformer_onnx.h"
 
-void track(OSTrack *tracker, const char *video_path)
+void track(Mixformer *tracker, const char *video_path)
 {
     // Read video.
     cv::VideoCapture capture;
@@ -109,15 +109,15 @@ int main(int argc, char** argv)
     }
 
     // Get model path.
-    const char* model_path = argv[1]; // OSTrack-mnn/model/ostrack-bit8.mnn";
+    const char* model_path = argv[1]; // Mixformer-mnn/model/Mixformer-bit8.mnn";
 
     // Get video path.
     const char* video_path = argv[2]; 
 
     // Build tracker.
-    OSTrack *ostracker;
-    ostracker = new OSTrack(model_path, 8);
-    track(ostracker, video_path);
+    Mixformer *Mixformerer;
+    Mixformerer = new Mixformer(model_path, 8);
+    track(Mixformerer, video_path);
 
     return 0;
 }

@@ -76,7 +76,7 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT", dynamic
     profile = builder.create_optimization_profile()
     config.add_optimization_profile(profile)
 
-    f = "model/ostrack-256-ep300.engine"
+    f = "model/mixformer_v2.engine"
     with builder.build_engine(network, config) as engine, open(f, 'wb') as t:
     # with builder.build_serialized_network(network, config) as engine, open(f, 'wb') as t:
         t.write(engine.serialize())
@@ -84,7 +84,7 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT", dynamic
     return f, None
     
 def main():
-    export_engine(f_onnx='model/ostrack-256-ep300.onnx')
+    export_engine(f_onnx='model/mixformer_v2.onnx')
 
 if __name__ == '__main__':
     main()
