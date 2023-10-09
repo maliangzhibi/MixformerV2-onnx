@@ -130,6 +130,7 @@ class MFTrackerORT:
 
         ort_outs = self.ort_session.run(None, ort_inputs)
 
+        print(f">>> lenght trt_outputs: {ort_outs}")
         # pred_boxes = torch.from_numpy(ort_outs[0]).view(-1, 4)
         # pred_score = torch.from_numpy(ort_outs[1]).view(1).sigmoid().item()
         pred_boxes = torch.from_numpy(ort_outs[0])

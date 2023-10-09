@@ -21,26 +21,26 @@ trt.init_libnvinfer_plugins(TRT_LOGGER, '')
 LOGGING_NAME="MixformerNvinfer"
 LOGGER = logging.getLogger(LOGGING_NAME)
 
-ENGINE_TYPE=['mixformer_v2']
+ENGINE_TYPE=['mixformer_v2', 'mixformer_v2_int32']
 
 
 class MixformerNvinfer:
     """Mixformer Nvinfer
     """
-    def __init__(self, engine_type="mixformer_v2", engine_name="mixformer_v2") -> None:
+    def __init__(self, engine_name="mixformer_v2") -> None:
 
         # 检查输入的engine_type
-        assert engine_type in ENGINE_TYPE, "please check the engine_type whether is in ENGINE_TYPE=['bacbone_neck_x', 'backbone_neck_z', 'featfusor_head']."
+        assert engine_name in ENGINE_TYPE, "please check the engine_type whether is in ENGINE_TYPE=['bacbone_neck_x', \
+            'backbone_neck_z', 'featfusor_head', 'mixformer_v2', 'mixformer_v2_int32']."
 
         self.device = 0
         
         # 根据输入engine类型得到对应类型的模型
-        if engine_type == ENGINE_TYPE[0]:
-            self.engine_path = os.path.join("model", engine_name + '.engine')
-        else:
-            LOGGER.info(f"Error ENGINE_TYPE: {engine_type}")
+        self.engine_path = os.path.join("model", engine_name + '.engine')
+        if not os.path.exists(self.engine_path):
+            LOGGER.info(f"Error ENGINE_NAME: {engine_name}")
             sys.exit(1)
-
+        
         LOGGER.info(f"loading {self.engine_path} for TensorRT inference.")
         
         # 定义绑定数据
@@ -50,9 +50,13 @@ class MixformerNvinfer:
         self.logger = trt.Logger(trt.Logger.INFO)
 
         # 反序列化engine文件
-        with open(self.engine_path, 'rb') as f, trt.Runtime(self.logger) as runtime:
-            # print(">>> ",   f.read())
-            self.model = runtime.deserialize_cuda_engine(f.read())
+        # with open(self.engine_path, 'rb') as f, trt.Runtime(self.logger) as runtime:
+        #     # print(">>> ",   f.read())
+        #     self.model = runtime.deserialize_cuda_engine(f.read())
+        runtime = trt.Runtime(self.logger)
+        with open(self.engine_path, "rb") as f:
+            serialized_engine = f.read()
+        self.model = runtime.deserialize_cuda_engine(serialized_engine)
         
         # 创建上下文
         self.context = self.model.create_execution_context()
@@ -99,12 +103,12 @@ class MixformerNvinfer:
         Returns:
             _type_: _description_
         """
-        print(f">>> img_t data_ptr: {im.data_ptr()} {int(im_0.data_ptr())} {int(im_1.data_ptr())}") # ==
+        # print(f">>> img_t data_ptr: {im.data_ptr()} {int(im_0.data_ptr())} {int(im_1.data_ptr())}") # ==
         # 将实际输入的图像地址取出，并赋值给binding_addr
         self.binding_addrs['img_t'] = int(im.data_ptr())
         self.binding_addrs['img_ot'] = int(im_0.data_ptr())
         self.binding_addrs['img_search'] = int(im_1.data_ptr())
-        print(f">>> img_t data_ptr1: {list(self.binding_addrs.values())}")
+        # print(f">>> img_t data_ptr1: {list(self.binding_addrs.values())}")
         # 将绑定的地址地址传递给context，使用execute_v2进行推理，推理结果就会保存在对应的地址中，通过访问对应地址的数据就能得到输出
         self.context.execute_v2(list(self.binding_addrs.values()))
         y = [self.bindings[x].data for x in self.output_names]

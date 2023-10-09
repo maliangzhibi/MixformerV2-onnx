@@ -6,7 +6,6 @@ import onnx
 import tensorrt as trt
 import inspect
 import logging
-import logging.config as log_config
 import os
 import platform
 import time
@@ -20,7 +19,7 @@ def set_logging(name=LOGGING_NAME, verbose=True):
     # sets up logging for the given name
     rank = int(os.getenv('RANK', -1))  # rank in world for Multi-GPU trainings
     level = logging.INFO if verbose and rank in {-1, 0} else logging.ERROR
-    log_config.dictConfig({
+    logging.config.dictConfig({
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
@@ -65,13 +64,17 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT", dynamic
     """
     from pathlib import Path
     assert Path(f_onnx).exists(), f'NOt found ONNX file: {f_onnx}' 
-    model = onnx.load(f_onnx)
-    onnx.checker.check_model(model)
+    # model = onnx.load(f_onnx)
+    # onnx.checker.check_model(model)
+    onnx = Path(f_onnx)
+    LOGGER.info(f'\n{prefix} starting export with TensorRT {trt.__version__}...')
+    assert onnx.exists(), f'failed to export ONNX file: {onnx}'
+    f = Path('model/mixformer_v2.engine')  # TensorRT engine file
 
     logger = trt.Logger(trt.Logger.INFO)
     if verbose:
         logger.min_serverity = trt.Logger.Serverity.VERBOSE
-    trt.init_libnvinfer_plugins(logger, namespace='')
+    # trt.init_libnvinfer_plugins(logger, namespace='')
 
     builder = trt.Builder(logger)
     config = builder.create_builder_config()
@@ -83,8 +86,9 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT", dynamic
 
     network = builder.create_network(flag)
     parser = trt.OnnxParser(network, logger)
-    if not parser.parse_from_file(f_onnx):
-        raise RuntimeError(f'failed to load ONNX file: {f_onnx}')
+    if not parser.parse_from_file(onnx):
+        print(f">>> parser: {onnx}")
+        raise RuntimeError(f'failed to load ONNX file: {onnx}')
     
     inputs = [network.get_input(i) for i in range(network.num_inputs)]
     outputs = [network.get_output(i) for i in range(network.num_outputs)]
@@ -97,16 +101,18 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT", dynamic
     config.add_optimization_profile(profile)
 
     f = "model/mixformer_v2.engine"
-    with builder.build_serialized_network(network, config) as engine, open(f, 'wb') as t:
+    half = False
+    LOGGER.info(f'{prefix} building FP{16 if builder.platform_has_fast_fp16 and half else 32} engine as {f}')
+    if builder.platform_has_fast_fp16 and half:
+        config.set_flag(trt.BuilderFlag.FP16)
+
+    with builder.build_engine(network, config) as engine, open(f, 'wb') as t:
         t.write(engine.serialize())
 
-    # with open(f, 'rb') as model:
-    #     builder.build_serialized_network(network, config)
-
-    # return f, None
+    return f, None
     
 def main():
-    export_engine1(file=Path('model/mixformer_v2.onnx'))
+    export_engine(f_onnx='model/mixformer_v2.onnx')
 
 
 class Profile(contextlib.ContextDecorator):
@@ -192,9 +198,9 @@ def colorstr(*input):
 
 
 @try_export
-def export_engine1(file, half=False, workspace=4, verbose=False, prefix=colorstr('TensorRT:')):
+def export_engine(model, im, file, half, dynamic, simplify, workspace=4, verbose=False, prefix=colorstr('TensorRT:')):
     # YOLOv5 TensorRT export https://developer.nvidia.com/tensorrt
-    # assert im.device.type != 'cpu', 'export running on CPU but must be on GPU, i.e. `python export.py --device 0`'
+    assert im.device.type != 'cpu', 'export running on CPU but must be on GPU, i.e. `python export.py --device 0`'
     # try:
     #     import tensorrt as trt
     # except Exception:
@@ -210,12 +216,11 @@ def export_engine1(file, half=False, workspace=4, verbose=False, prefix=colorstr
     # else:  # TensorRT >= 8
     #     check_version(trt.__version__, '8.0.0', hard=True)  # require tensorrt>=8.0.0
     #     export_onnx(model, im, file, 12, dynamic, simplify)  # opset 12
-    onnx = file.with_suffix('.onnx')
-    print(f">>> onnx: {onnx}")
+    onnx = file.with_suffix('model/*.onnx')
+
     LOGGER.info(f'\n{prefix} starting export with TensorRT {trt.__version__}...')
     assert onnx.exists(), f'failed to export ONNX file: {onnx}'
     f = file.with_suffix('.engine')  # TensorRT engine file
-
     logger = trt.Logger(trt.Logger.INFO)
     if verbose:
         logger.min_severity = trt.Logger.Severity.VERBOSE
@@ -228,9 +233,9 @@ def export_engine1(file, half=False, workspace=4, verbose=False, prefix=colorstr
     flag = (1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
     network = builder.create_network(flag)
     parser = trt.OnnxParser(network, logger)
-    if parser.parse_from_file(str(onnx)):
-        print(f">>> parser: {onnx} parser success.")
-        # raise RuntimeError(f'failed to load ONNX file: {onnx}')
+    if not parser.parse_from_file(str(onnx)):
+        print(f">>> parser: {onnx}")
+        raise RuntimeError(f'failed to load ONNX file: {onnx}')
 
     inputs = [network.get_input(i) for i in range(network.num_inputs)]
     outputs = [network.get_output(i) for i in range(network.num_outputs)]
@@ -239,13 +244,20 @@ def export_engine1(file, half=False, workspace=4, verbose=False, prefix=colorstr
     for out in outputs:
         LOGGER.info(f'{prefix} output "{out.name}" with shape{out.shape} {out.dtype}')
 
+    if dynamic:
+        if im.shape[0] <= 1:
+            LOGGER.warning(f"{prefix} WARNING ⚠️ --dynamic model requires maximum --batch-size argument")
+        profile = builder.create_optimization_profile()
+        for inp in inputs:
+            profile.set_shape(inp.name, (1, *im.shape[1:]), (max(1, im.shape[0] // 2), *im.shape[1:]), im.shape)
+        config.add_optimization_profile(profile)
+
     LOGGER.info(f'{prefix} building FP{16 if builder.platform_has_fast_fp16 and half else 32} engine as {f}')
     if builder.platform_has_fast_fp16 and half:
         config.set_flag(trt.BuilderFlag.FP16)
-
     with builder.build_engine(network, config) as engine, open(f, 'wb') as t:
         t.write(engine.serialize())
-    # return f, None
+    return f, None
 
 if __name__ == '__main__':
     main()

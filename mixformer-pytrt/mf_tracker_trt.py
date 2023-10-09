@@ -124,7 +124,7 @@ class MFTrackerORT:
 
         # compute trt output prediction
         trt_outputs = self.mixformer_tracker.infer(self.template, self.online_template, search)
-
+        print(f">>> lenght trt_outputs: {trt_outputs}")
         pred_boxes = trt_outputs[0]
         pred_score = trt_outputs[1]
 
@@ -283,7 +283,7 @@ if __name__ == '__main__':
 
             target_pos = [x, y]
             target_sz = [w, h]
-            print('====================type=================', target_pos, type(target_pos), type(target_sz))
+            # print('====================type=================', target_pos, type(target_pos), type(target_sz))
             Tracker.track_init(frame, target_pos, target_sz)
             first_frame = False
         else:
