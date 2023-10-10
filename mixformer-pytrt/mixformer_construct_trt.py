@@ -3,6 +3,7 @@ from pathlib import Path
 import struct
 import numpy as np
 import pycuda
+import torch
 
 verbose = True
 IN_NAME1 = 'img_t'
@@ -57,6 +58,7 @@ def transpose(network, input_tensor, perm):
     shuffle_layer.first_transpose = trt.Permutation(perm)
     return shuffle_layer
 
+
 def layer_norm(network, weight, bias, input_tensor, exp):
     # 先进性标准化
     reduce_axes = 4 << 0  # 选择第一个维度
@@ -100,6 +102,7 @@ def layer_norm(network, weight, bias, input_tensor, exp):
     
     return add_tensor
 
+
 def matmul(network, input_tensor, weight):
     """实现矩阵乘的操作
 
@@ -119,7 +122,7 @@ def mul(network, input_tensor, weight, weight_shape):
     Args:
         network (_type_): _description_
         input_tensor (_type_): _description_
-        weight (_type_): _description_
+        weight (_type_): list
     """
     # mul(input_tensor, weight)
     weight = np.array(weight).astype(np.float32)
@@ -127,6 +130,7 @@ def mul(network, input_tensor, weight, weight_shape):
     weight_constant = network.add_constant(weight_shape, weight)
     # input_tensor
     weight_constant = reshape(network=network, input_tensor=weight_constant.get_output(0), new_shape=weight_shape)
+    # print(f">>>mul: {weight_constant.get_output(0).shape} {input_tensor.shape}")
     mul_layer = network.add_elementwise(input_tensor, weight_constant.get_output(0), trt.ElementWiseOperation.PROD)
     return mul_layer
 
@@ -250,6 +254,7 @@ def split(network, input_tensor, axis=0):
 
     return slices
 
+
 def split2(network, input_tensor):
     """将张量两个张量分别为(1, 12, 98, 64)和(1, 12, 98, 200),并返回对应的层。
 
@@ -262,8 +267,40 @@ def split2(network, input_tensor):
     first_slice_layer = network.add_slice(input_tensor, start=(0, 0, 0, 0), shape=(1, 12, 98, 64), stride=(1, 1, 1, 1))
     # 第二部分：从(1, 12, 98, 64)到(1, 12, 200, 64)
     second_slice_layer = network.add_slice(input_tensor, start=(0, 0, 98, 0), shape=(1, 12, 200, 64), stride=(1, 1, 1, 1))
-
+    # print(f">>>split_list2: {first_slice_layer.get_output(0).shape} {second_slice_layer.get_output(0).shape}")
     return first_slice_layer, second_slice_layer
+
+
+def split4(network, input_tensor, split_list, axis):
+    """将张量分为四个部分，四个部分的shape分别为[a, b, c, d]
+
+    Args:
+        network (_type_): _description_
+        input_tensor (_type_): _description_
+    """
+    # print(f">>>split_list: {split_list}")
+    B, N, C = input_tensor.shape
+    x, y, z, j = split_list
+    # 第一部分 从0到a
+    if axis == 2:
+        first_slice_layer = network.add_slice(input_tensor, start=(0, 0, 0), shape=(B, N, x), stride=(1, 1, 1))
+        # 第二部分 从a到b
+        second_slice_layer = network.add_slice(input_tensor, start=(0, 0, x), shape=(B, N, y), stride=(1, 1, 1))
+        # 第三部分 从b到c
+        third_slice_layer = network.add_slice(input_tensor, start=(0, 0, x+y), shape=(B, N, z), stride=(1, 1, 1))
+        # 第四部分 从c到d
+        four_slice_layer = network.add_slice(input_tensor, start=(0, 0, x+y+z), shape=(B, N, j), stride=(1, 1, 1))
+
+    if axis == 1:
+        first_slice_layer = network.add_slice(input_tensor, start=(0, 0, 0), shape=(B, x, C), stride=(1, 1, 1))
+        # 第二部分 从a到b
+        second_slice_layer = network.add_slice(input_tensor, start=(0, x, 0), shape=(B, y, C), stride=(1, 1, 1))
+        # 第三部分 从b到c
+        third_slice_layer = network.add_slice(input_tensor, start=(0, x+y, 0), shape=(B, z, C), stride=(1, 1, 1))
+        # 第四部分 从c到d
+        four_slice_layer = network.add_slice(input_tensor, start=(0, x+y+z, 0), shape=(B, j, C), stride=(1, 1, 1))
+
+    return first_slice_layer, second_slice_layer, third_slice_layer, four_slice_layer
 
 
 def drop_path(network, input_tensor, drop_prob, training=False):
@@ -279,6 +316,7 @@ def drop_path(network, input_tensor, drop_prob, training=False):
     
     # todo 可能的其他操作，未完成，该模型中不需要
 
+
 def mlp(network, input_tensor, weight, bias):
     """_summary_
 
@@ -288,9 +326,9 @@ def mlp(network, input_tensor, weight, bias):
         weight (_type_): _description_
         bias (_type_): _description_
     """
-    # linear 1
+    # linear
     # matmul操作
-    # B, N, C = input_tensor.sahpe
+    # B, N, C = input_tensor.shape
     # print(f">>>BNC: {B} {N} {C}")
     weight = np.ascontiguousarray(np.array(weight).reshape(-1, 768).transpose(1, 0)).astype(np.float32)
     weight_dim = weight.shape
@@ -306,7 +344,8 @@ def mlp(network, input_tensor, weight, bias):
     add_layer = network.add_elementwise(mm_layer.get_output(0), bias_tensor.get_output(0), trt.ElementWiseOperation.SUM)
 
     return add_layer
- 
+
+
 def gelu(network, input_tensor):
     """gelu激活函数
 
@@ -340,6 +379,37 @@ def gelu(network, input_tensor):
 
     return gelu_result_layer
 
+
+def relu(network, input_tensor):
+    """relu激活函数
+
+    Args:
+        network (_type_): _description_
+        input_tensor (_type_): _description_
+    """
+    relu_layer = network.add_activation(input_tensor, trt.ActivationType.RELU)
+    return relu_layer
+
+
+def sigmoid(network, input_tensor):
+    """sigmoid激活函数
+
+    Args:
+        network (_type_): _description_
+        input_tensor (_type_): _description_
+    """
+    sig_layer = network.add_activation(input_tensor, trt.ActivationType.SIGMOID)
+    return sig_layer
+
+
+def softmax(network, input_tensor):
+    softmax_layer = network.add_softmax(input_tensor)
+    return softmax_layer
+
+
+def indice(feat_sz, stride):
+    indice_array = (torch.arange(0, feat_sz).unsqueeze(0) * stride).numpy()
+    return indice_array
 
 # def block_n(network, weights, block_num, input_x_tensor, H_t, W_t, H_s, W_s):
 def block_n(network, weights, block_num, input_x_tensor):
@@ -397,13 +467,146 @@ def block_n(network, weights, block_num, input_x_tensor):
     # print(f">>> mlp_layer2: {x_mlp_add_layer.get_output(0).shape}")
     return x_mlp_add_layer
 
+
+def box_head_ltrb(network, input_tensor, weight):
+    """将输入
+
+    Args:
+        network (_type_): _description_
+        input_tensor (_type_): _description_
+        weight (_type_): _description_
+    """
+    # 定义参数
+    bh_weight_00 = weight[f'box_head.layers.0.0.weight']
+    bh_bias_00 = weight[f'box_head.layers.0.0.bias']
+    bh_norm_weight_01 = weight[f'box_head.layers.0.1.weight']
+    bh_norm_bias_01 = weight[f'box_head.layers.0.1.bias']
+
+    bh_weight_10 = weight[f'box_head.layers.1.0.weight']
+    bh_bias_10 = weight[f'box_head.layers.1.0.bias']
+    bh_norm_weight_11= weight[f'box_head.layers.1.1.weight']
+    bh_norm_bias_11 = weight[f'box_head.layers.1.1.bias']
+    
+    # 计算 Linear1操作
+    linear_layer_1 = mlp(network=network, input_tensor=input_tensor, weight=bh_weight_00, bias=bh_bias_00)
+    norm_layer_1 = layer_norm(network=network, weight=bh_norm_weight_01, bias=bh_norm_bias_01, 
+                              input_tensor=linear_layer_1.get_output(0), exp=2)
+    relu_layer_1 = relu(network=network, input_tensor=norm_layer_1.get_output(0))
+
+    # 计算 Linear2操作      
+    linear_layer_2 = mlp(network=network, input_tensor=relu_layer_1.get_output(0), weight=bh_weight_10, bias=bh_bias_10)
+    norm_layer_2 = layer_norm(network=network, weight=bh_norm_weight_11, bias=bh_norm_bias_11, 
+                              input_tensor=linear_layer_2.get_output(0), exp=2)
+    softmax_layer =softmax(network=network, input_tensor=norm_layer_2.get_output(0))
+
+    indice_array = indice(feat_sz=96, stride=2.3333333333333335)
+    mul_layer = mul(network=network, input_tensor=softmax_layer.get_output(0), weight=indice_array, weight_shape=trt.Dims([1, 1, 96]))
+
+    reduce_axes = 4 << 0
+    reduce_sum_layer = network.add_reduce(mul_layer.get_output(0), trt.ReduceOperation.AVG, reduce_axes, False)
+    # print(f">>>box_head: {mul_layer.get_output(0).shape} {reduce_sum_layer.get_output(0).shape}")
+    return reduce_sum_layer
+
+
+def div(network, input_tensor, weight_const):
+    """_summary_
+
+    Args:
+        network (_type_): _description_
+        input_tensor (_type_): _description_
+    """
+    if len(input_tensor.shape) == 1:
+        input_shape = (1,)
+    elif len(input_tensor.shape) == 2:
+        input_shape = (1, 1)
+    elif len(input_tensor.shape) == 3:
+        input_shape = (1, 1, 1)
+    elif len(input_tensor.shape) == 4:
+        input_shape = (1, 1, 1, 1)
+    else:
+        print(f">>> input_shape is not valid !!!")
+        exit(1)
+    
+    const_div_layer = network.add_constant(input_shape, trt.Weights(np.array([weight_const], dtype=np.float32))).get_output(0)
+    div_layer = network.add_elementwise(input_tensor, const_div_layer, trt.ElementWiseOperation.DIV)
+    
+    return div_layer
+
+
+def box_head(network, input_tensor1, input_tensor2, input_tensor3, input_tensor4):
+    """ltrt四个输入
+
+    Args:
+        network (_type_): _description_
+        input_tensor1 (_type_): _description_
+        input_tensor2 (_type_): _description_
+        input_tensor3 (_type_): _description_
+        input_tensor4 (_type_): _description_
+    """
+    concate_layer_1 = network.add_concatenation([input_tensor1, input_tensor2, input_tensor3, input_tensor4])
+    concate_layer_1.axis = 1
+
+    # div 
+    div_layer_1 = div(network=network, input_tensor=concate_layer_1.get_output(0), weight_const=224)
+
+    # split
+    reshape_layer = reshape(network=network, input_tensor=div_layer_1.get_output(0), new_shape=trt.Dims([1,  1, 4]))
+    sp_layer_1, sp_layer_2, sp_layer_3, sp_layer_4 = split4(network=network, input_tensor=reshape_layer.get_output(0), split_list=[1, 1, 1, 1], axis=2)
+
+    # add split1 and split3, sub split1 and split3
+    add_sp13_layer = network.add_elementwise(sp_layer_1.get_output(0), sp_layer_3.get_output(0), trt.ElementWiseOperation.SUM)
+    sub_sp13_layer = network.add_elementwise(sp_layer_1.get_output(0), sp_layer_3.get_output(0), trt.ElementWiseOperation.SUB)
+    # add split2 and split4, sub split2 and split4
+    add_sp24_layer = network.add_elementwise(sp_layer_2.get_output(0), sp_layer_4.get_output(0), trt.ElementWiseOperation.SUM)
+    sub_sp24_layer = network.add_elementwise(sp_layer_2.get_output(0), sp_layer_4.get_output(0), trt.ElementWiseOperation.SUB)
+    # div add_sp13 / 2
+    div_sp13 = div(network=network, input_tensor=add_sp13_layer.get_output(0), weight_const=2.0)
+    # div add_sp24 / 2
+    div_sp24 = div(network=network, input_tensor=add_sp24_layer.get_output(0), weight_const=2.0)
+
+    concate_layer_2 = network.add_concatenation([div_sp13.get_output(0), sub_sp13_layer.get_output(0), div_sp24.get_output(0), sub_sp24_layer.get_output(0)])
+    concate_layer_2.axis = 2
+
+    reshape_layer_out = reshape(network=network, input_tensor=concate_layer_2.get_output(0), new_shape=trt.Dims([1, 4]))
+    # print(f">>>box_head: {reshape_layer_out.get_output(0).shape}")
+
+    return reshape_layer_out
+
+
+def score_head(network, input_tensor, weight):
+    """通过给定的weight字典取得对应的权重，用于计算score_head结果
+
+    Args:
+        network (_type_): _description_
+        input_tensor (_type_): _description_
+        weight (_type_): _description_
+    """
+    sh_weight_00 = weight['score_head.layers.0.0.weight']
+    sh_bias_00 = weight['score_head.layers.0.0.bias']
+    sh_weight_1 = weight['score_head.layers.1.weight']
+    sh_bias_1 = weight['score_head.layers.1.bias']
+    
+    # matmul add两步计算使用mmlp计算代替
+    mm_add_weight_bias_00_layer = mlp(network=network, input_tensor=input_tensor, weight=sh_weight_00, bias = sh_bias_00)
+    relu_layer = relu(network=network, input_tensor=mm_add_weight_bias_00_layer.get_output(0))
+    mm_add_weight_bias_11_layer = mlp(network=network, input_tensor=relu_layer.get_output(0), weight=sh_weight_1, bias = sh_bias_1)
+    
+    reduce_axes = 2 << 0
+    reduce_sum_layer = network.add_reduce(mm_add_weight_bias_11_layer.get_output(0), trt.ReduceOperation.AVG, reduce_axes, False)
+
+    # 计算sigmoid值
+    sig_layer = sigmoid(network=network, input_tensor=reduce_sum_layer.get_output(0))
+    score_pred_layer = reshape(network=network, input_tensor=sig_layer.get_output(0), new_shape=trt.Dims([1]))
+    print(f">>>score_head: {score_pred_layer.get_output(0).shape}")
+    return score_pred_layer
+
 def construct_network():
    # 读取权重
     wts_path = Path("model/mixformerv2.wts")
     weights = read_wts(wts_path)
 
     EXPLICIT_BATCH = 1 << (int)( 
-    trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH) 
+    trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
     
     TRT_LOGGER = trt.Logger(trt.Logger.VERBOSE) if verbose else trt.Logger() 
     with trt.Builder(TRT_LOGGER) as builder, builder.create_builder_config( 
@@ -489,9 +692,41 @@ def construct_network():
         block3_layer = block_n(network=network, weights=weights, block_num=3, input_x_tensor=block2_layer.get_output(0))
 
         # box_head
-
+        split_layer_1, split_layer_2, split_layer_3, split_layer_4 =  split4(network=network, input_tensor=block3_layer.get_output(0),
+                                                                             split_list=[49, 49, 196, 4], axis=1)
+        bh_split_layer_1, bh_split_layer_2, bh_split_layer_3, bh_split_layer_4 = split4(network=network, input_tensor=split_layer_4.get_output(0),
+                                                                             split_list=[1, 1, 1, 1], axis=1)
+        bh_layer_l = box_head_ltrb(network=network, input_tensor=bh_split_layer_1.get_output(0), weight=weights)
+        bh_layer_t = box_head_ltrb(network=network, input_tensor=bh_split_layer_2.get_output(0), weight=weights)
+        bh_layer_r = box_head_ltrb(network=network, input_tensor=bh_split_layer_3.get_output(0), weight=weights)
+        bh_layer_b = box_head_ltrb(network=network, input_tensor=bh_split_layer_4.get_output(0), weight=weights)
+        # pred_boxes
+        pred_boxes_layer = box_head(network=network, 
+                            input_tensor1=bh_layer_l.get_output(0), input_tensor2=bh_layer_t.get_output(0),
+                            input_tensor3=bh_layer_r.get_output(0), input_tensor4=bh_layer_b.get_output(0))
+        
         # score head
-        print(f">>>shape: {block3_layer.get_output(0).shape}")
+        pred_scores_layer = score_head(network=network, input_tensor=split_layer_4.get_output(0), weight=weights)
+        
+        # 设置并标记输出
+        pred_boxes_layer.get_output(0).name = OUT_NAME1
+        pred_scores_layer.get_output(0).name = OUT_NAME2
+        network.mark_output(pred_boxes_layer.get_output(0))
+        network.mark_output(pred_scores_layer.get_output(0))
+
+    # config = builder.create_builder_config()
+    # config.max_workspace_size = 1 << 20
+    # engine = builder.build_engine(network, config)
+    #step3：创建config并设置最大batchsize和最大工作空间
+    with builder.create_builder_config() as config:
+        config.max_workspace_size = 4 << 20
+        
+    #step4：创建engine
+    engine = builder.build_engine(network, config)
+
+    #step5:序列化保存engine到planfile
+    with open('model/mixformer_v2.engine', 'wb') as f:
+        f.write(engine.serialize())
 
 
 

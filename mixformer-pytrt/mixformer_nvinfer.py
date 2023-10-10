@@ -123,6 +123,26 @@ class MixformerNvinfer:
         return torch.from_numpy(x).to(self.device) if isinstance(x, np.ndarray) else x
 
 
+# class MixformerNvinfer:
+#     def __init__(self, engine_path=None) -> None:
+#         assert engine_path is not None, "engine path is None"
+
+#         # 1. 创建TensorRT的runtime
+#         TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+#         runtime = trt.Runtime(TRT_LOGGER)
+
+#         # 2. 从文件中加载engine
+#         with open(engine_path, "rb") as f:
+#             engine_data = f.read()
+#         self.engine = runtime.deserialize_cuda_engine(engine_data)
+        
+#         # 3. 创建执行上下文并进行推理
+#         self.context = self.engine.create_execution_context()
+
+#     def infer(self, img_t, img_ot, img_search):
+
+
+
 if __name__=="__main__":
     det = MixformerNvinfer(ENGINE_TYPE[0])
 
@@ -131,7 +151,7 @@ if __name__=="__main__":
     input1= torch.rand((1, 3, 224, 224)).cuda()
 
     warmup_N = 100
-    N = 100
+    N = 1000
     for i in range(warmup_N):
         output = det.infer(input, input0, input1)
     
