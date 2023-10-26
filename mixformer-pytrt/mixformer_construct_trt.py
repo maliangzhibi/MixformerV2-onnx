@@ -43,11 +43,13 @@ def read_wts(filename):
     print(f">>>wts name: {weights.keys()}")
     return weights
 
+
 def reshape(network, input_tensor, new_shape):
     shuffle_layer = network.add_shuffle(input_tensor)
     shuffle_layer.reshape_dims = new_shape
 
     return shuffle_layer
+
 
 def transpose(network, input_tensor, perm):
     # 创建一个shuffle层来实现transpose操作
@@ -600,6 +602,7 @@ def score_head(network, input_tensor, weight):
     print(f">>>score_head: {score_pred_layer.get_output(0).shape}")
     return score_pred_layer
 
+
 def construct_network():
    # 读取权重
     wts_path = Path("model/mixformerv2.wts")
@@ -727,7 +730,6 @@ def construct_network():
     #step5:序列化保存engine到planfile
     with open('model/mixformer_v2.engine', 'wb') as f:
         f.write(engine.serialize())
-
 
 
 if __name__=="__main__":

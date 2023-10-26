@@ -64,17 +64,43 @@ class Preprocessor_wo_mask(object):
         self.std = torch.tensor([0.229, 0.224, 0.225]).view((1, 3, 1, 1)).cuda()
 
     def process(self, img_arr: np.ndarray):
-        # Deal with the image patch
+        """初始化预处理图像. 
+           需要注意的是: 如果按照如下方式处理则无法通过。原因是transpose之后的数据部连续，需要将其变为连续的数
+           据，所以需要先进行ascontiguousarray
+           '''
+            img_tensor = torch.tensor(img_arr).cuda().float().permute((2,0,1)).unsqueeze(dim=0)
+            img_tensor_norm = ((img_tensor / 255.0) - self.mean) / self.std  # (1,3,H,W)
+            return img_tensor_norm
+           '''
+            因此，等效的实现包含两种，一种是直接在返回的tensor上添加contiguous,另一种是在numpy.array数据的
+            时候就进行ascontiguousarray.
+        Args:
+            img_arr (np.ndarray): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        # 第一种方法
+        # im = np.ascontiguousarray(img_arr.transpose((2, 0, 1))[::-1]) # HWC to CHW, BGR to RGB
+        # im = torch.from_numpy(im).cuda().float()
+        # im = ((im / 255.0) - self.mean) / self.std
+        # if len(im.shape) == 3:
+        #     im = im[None]
+            
+        # print(f"preprocessor im: {im.shape}")
+        # return im
+        
+        # 第二种方法 
         img_tensor = torch.tensor(img_arr).cuda().float().permute((2,0,1)).unsqueeze(dim=0)
         img_tensor_norm = ((img_tensor / 255.0) - self.mean) / self.std  # (1,3,H,W)
-        return img_tensor_norm
+        return img_tensor_norm.contiguous()
 
 class MFTrackerORT:
     def __init__(self) -> None:
         self.debug = True
-        self.mixformer_tracker = MixformerNvinfer()
-        self.video_name = "/home/nhy/lsm/dataset/person2.mp4"
+        self.video_name = "/home/nhy/lsm/dataset/target.mp4"
         
+        self.init_track_net()
         self.preprocessor = Preprocessor_wo_mask()
         self.max_score_decay = 1.0
         self.search_factor = 4.5
@@ -83,6 +109,11 @@ class MFTrackerORT:
         self.template_size = 112
         self.update_interval = 200
         self.online_size = 1
+
+    def init_track_net(self):
+        """使用设置的参数初始化tracker网络
+        """        
+        self.mixformer_tracker = MixformerNvinfer()
 
     def track_init(self, frame, target_pos=None, target_sz = None):
         """使用第一帧进行初始化
@@ -121,10 +152,10 @@ class MFTrackerORT:
         x_patch_arr, resize_factor, x_amask_arr = self.sample_target(image, self.state, self.search_factor,
                                                                 output_sz=self.search_size)  # (x1, y1, w, h)
         search = self.preprocessor.process(x_patch_arr)
-
+        print(f">>>search: {type(search)}")
         # compute trt output prediction
         trt_outputs = self.mixformer_tracker.infer(self.template, self.online_template, search)
-        print(f">>> lenght trt_outputs: {trt_outputs}")
+        # print(f">>> lenght trt_outputs: {trt_outputs}")
         pred_boxes = trt_outputs[0]
         pred_score = trt_outputs[1]
 
@@ -272,7 +303,7 @@ if __name__ == '__main__':
     else:
         video_name = 'webcam'
     cv2.namedWindow(video_name, cv2.WND_PROP_FULLSCREEN)
-
+    print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
     frame_id = 0
     total_time = 0
     for frame in get_frames(Tracker.video_name):
@@ -291,7 +322,6 @@ if __name__ == '__main__':
             # draw_trace(frame, Tracker.trace_list)
             # draw_circle(frame, Tracker.state['target_pos'])
             frame_id += 1
-
             cv2.imshow('Tracking', frame)
             cv2.waitKey(1)
 

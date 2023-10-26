@@ -71,7 +71,7 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT", dynamic
     logger = trt.Logger(trt.Logger.INFO)
     if verbose:
         logger.min_serverity = trt.Logger.Serverity.VERBOSE
-    # trt.init_libnvinfer_plugins(logger, namespace='')
+    trt.init_libnvinfer_plugins(logger, namespace='')
 
     builder = trt.Builder(logger)
     config = builder.create_builder_config()
@@ -83,7 +83,7 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT", dynamic
 
     network = builder.create_network(flag)
     parser = trt.OnnxParser(network, logger)
-    if not parser.parse_from_file(str(f_onnx)):
+    if not parser.parse_from_file(f_onnx):
         raise RuntimeError(f'failed to load ONNX file: {f_onnx}')
     
     inputs = [network.get_input(i) for i in range(network.num_inputs)]
@@ -96,10 +96,9 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT", dynamic
     profile = builder.create_optimization_profile()
     config.add_optimization_profile(profile)
 
-    f = "model/mixformer_v2_sim.engine"
-    engine = builder.build_serialized_network(network, config)
-    with open(f, 'wb') as t:
-        t.write(engine)
+    f = "model/mixformer_backbone_v2.engine"
+    with builder.build_serialized_network(network, config) as engine, open(f, 'wb') as t:
+        t.write(engine.serialize())
 
     # with open(f, 'rb') as model:
     #     builder.build_serialized_network(network, config)
@@ -232,14 +231,13 @@ def export_engine1(file, half=False, workspace=4, verbose=True, prefix=colorstr(
     if builder.platform_has_fast_fp16 and half:
         config.set_flag(trt.BuilderFlag.FP16)
 
-    engine = builder.build_serialized_network(network, config)
-    with open(f, 'wb') as t:
-        t.write(engine)
+    with builder.build_engine(network, config) as engine, open(f, 'wb') as t:
+        t.write(engine.serialize())
     # return f, None
 
     
 def main():
-    export_engine(f_onnx=Path('model/mixformer_v2_sim.onnx'), verbose=False)
+    export_engine1(file=Path('model/mixformer_head_v2_sim.onnx'), verbose=True)
 
 if __name__ == '__main__':
     main()

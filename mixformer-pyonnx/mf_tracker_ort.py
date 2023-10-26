@@ -61,7 +61,7 @@ class Preprocessor_wo_mask(object):
         # Deal with the image patch
         img_tensor = torch.tensor(img_arr).cuda().float().permute((2,0,1)).unsqueeze(dim=0)
         img_tensor_norm = ((img_tensor / 255.0) - self.mean) / self.std  # (1,3,H,W)
-        return img_tensor_norm
+        return img_tensor_norm.contiguous()
 
 class MFTrackerORT:
     def __init__(self) -> None:
@@ -69,8 +69,8 @@ class MFTrackerORT:
         self.gpu_id = 0
         self.providers = ["CUDAExecutionProvider"]
         self.provider_options = [{"device_id": str(self.gpu_id)}]
-        self.model_path = "model/mixformer_v2.onnx"
-        self.video_name = "/home/nhy/lsm/dataset/person2.mp4"
+        self.model_path = "model/mixformer_v2_sim.onnx"
+        # self.video_name = "/home/nhy/lsm/dataset/target.mp4"
         
         self.init_track_net()
         self.preprocessor = Preprocessor_wo_mask()
@@ -130,9 +130,7 @@ class MFTrackerORT:
 
         ort_outs = self.ort_session.run(None, ort_inputs)
 
-        print(f">>> lenght trt_outputs: {ort_outs}")
-        # pred_boxes = torch.from_numpy(ort_outs[0]).view(-1, 4)
-        # pred_score = torch.from_numpy(ort_outs[1]).view(1).sigmoid().item()
+        # print(f">>> lenght trt_outputs: {ort_outs}")
         pred_boxes = torch.from_numpy(ort_outs[0])
         pred_score = torch.from_numpy(ort_outs[1])
         # print(f">>> box and score: {pred_boxes}  {pred_score}")
@@ -273,6 +271,7 @@ if __name__ == '__main__':
     print("测试")
     Tracker = MFTrackerORT()
     first_frame = True
+    Tracker.video_name = "/home/nhy/lsm/dataset/target.mp4"
 
     if Tracker.video_name:
         video_name = Tracker.video_name
@@ -283,7 +282,7 @@ if __name__ == '__main__':
     frame_id = 0
     total_time = 0
     for frame in get_frames(Tracker.video_name):
-        print(f"frame shape {frame.shape}")
+        # print(f"frame shape {frame.shape}")
         tic = cv2.getTickCount()
         if first_frame:
             x, y, w, h = cv2.selectROI(video_name, frame, fromCenter=False)
