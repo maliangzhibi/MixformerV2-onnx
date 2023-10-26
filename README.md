@@ -1,4 +1,4 @@
-# MixformerV2 onnx c++ version
+# MixformerV2 onnx c++ and TensorRT-py version
 MixFormerV2: Efficient Fully Transformer Tracking.
 
 [official pytorch](https://github.com/MCG-NJU/MixFormerV2.git)
