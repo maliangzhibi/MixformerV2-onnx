@@ -97,8 +97,7 @@ class Preprocessor_wo_mask(object):
 
 class MFTrackerORT:
     def __init__(self) -> None:
-        self.debug = True
-        self.video_name = "/home/nhy/lsm/dataset/target.mp4"
+        self.debug = True        
         
         self.init_track_net()
         self.preprocessor = Preprocessor_wo_mask()
@@ -296,6 +295,8 @@ class MFTrackerORT:
 if __name__ == '__main__':
     print("测试")
     Tracker = MFTrackerORT()
+    Tracker.video_name = "/home/nhy/lsm/dataset/target.mp4"
+
     first_frame = True
 
     if Tracker.video_name:
