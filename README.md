@@ -7,9 +7,13 @@ Here, the c++ version of onnx mixformerv2 tracking algorithm is provided, and th
 
 At the same time, a pytrt version was also provided, which reached 430fps on the 3080-laptop gpu.
 # 0. Download model
-[mixformer_v2.onnx model](https://www.123pan.com/s/6iArVv-FYAJ.html)
-[mixformer_v2_sim.onnx model](https://www.123pan.com/s/6iArVv-mcAJ.html)
-[mixformer_v2_sim.engine model](https://www.123pan.com/s/6iArVv-ocAJ.html)
+[mixformer_v2.onnx](https://www.123pan.com/s/6iArVv-FYAJ.html)
+
+[mixformer_v2_sim.onnx](https://www.123pan.com/s/6iArVv-mcAJ.html)
+
+[mixformer_v2_sim.engine](https://www.123pan.com/s/6iArVv-ocAJ.html)
+
+
 # 1. How to build and run it?
 
 ## modify your own CMakeList.txt
@@ -28,8 +32,9 @@ $ ./mixformer-onnx [model_path] [videopath(file or camera)]
 ```
 
 # 2. MixformerV2 TensorRT version inference in python
+
+modify the video path in Mixformerv2-onnx/mixformer-pytrt/mf_tracker_trt.py
 ```
-$ modify the video path in Mixformerv2-onnx/mixformer-pytrt/mf_tracker_trt.py
 $ cd Mixformerv2-onnx
 $ python mixformer-pytrt/mf_tracker_trt.py
 ```
