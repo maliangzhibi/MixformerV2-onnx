@@ -57,7 +57,7 @@ def to_numpy(tensor):
     return tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
 
 
-def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT"):
+def export_engine(f_onnx, half=False, workspace=4, verbose=False, prefix="TensorRT"):
     """使用onnx_parser解析onnx模型, 编译得到engine进行推理
 
     Args:
@@ -96,6 +96,11 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT"):
     config.add_optimization_profile(profile)
 
     f = "model/mixformer_v2_sim.engine"
+
+    LOGGER.info(f'{prefix} building FP{16 if builder.platform_has_fast_fp16 and half else 32} engine as {f}')
+    if builder.platform_has_fast_fp16 and half:
+        config.set_flag(trt.BuilderFlag.FP16)
+        
     engine = builder.build_serialized_network(network, config)
     with open(f, 'wb') as t:
         t.write(engine)
@@ -107,7 +112,7 @@ def export_engine(f_onnx, workspace=4, verbose=False, prefix="TensorRT"):
 
     
 def main():
-    export_engine(f_onnx=Path('model/mixformer_v2_sim.onnx'), verbose=False)
+    export_engine(f_onnx=Path('model/mixformer_v2_sim.onnx'), half=True, verbose=False)
 
 if __name__ == '__main__':
     main()

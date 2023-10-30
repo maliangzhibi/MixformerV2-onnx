@@ -329,8 +329,8 @@ if __name__ == '__main__':
         toc = int(1 / (toc / cv2.getTickFrequency()))
         total_time += toc
         print('Video: {:12s} {:3.1f}fps'.format('tracking', toc))
-        cv2.imshow('Tracking', frame)
-        cv2.waitKey(1)
+        # cv2.imshow('Tracking', frame)
+        # cv2.waitKey(1)
     
     print('video: average {:12s} {:3.1f} fps'.format('finale average tracking fps', total_time/(frame_id - 1)))
     cv2.destroyAllWindows()
