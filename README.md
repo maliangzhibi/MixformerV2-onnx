@@ -33,9 +33,10 @@ $ ./mixformer-onnx [model_path] [videopath(file or camera)]
 
 # 2. MixformerV2 TensorRT version inference in python
 
-modify the video path in Mixformerv2-onnx/mixformer-pytrt/mf_tracker_trt.py
+Modify the video path in Mixformerv2-onnx/mixformer-pytrt/mf_tracker_trt.py，and mkdir model file_dir, then download the onnx file and put onnx file into file_dir.
 ```
 $ cd Mixformerv2-onnx
+& python mixformer-pytrt/onnx2trt.py 
 $ python mixformer-pytrt/mf_tracker_trt.py
 ```
 Note: In addition to simplification when converting the onnx model, it is important to ensure that the shape of the data input to the engine model and the corresponding underlying data are continuous.
