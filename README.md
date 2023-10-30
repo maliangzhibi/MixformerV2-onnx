@@ -15,7 +15,7 @@ At the same time, a pytrt version was also provided, which reached 430fps on the
 
 
 # 1. How to build and run it?
-
+Prerequisites: First, download the source code of onnx and compile it. For details, see lite.ai.toolkit. Put the header file into the onnxruntime folder and put the compiled .so file into the lib folder. The above two folders are located in Mixformerv2-onnx. However, the above steps are not required for tensorRT inference, you only need to configure TensorRT.
 ## modify your own CMakeList.txt
 modify onnx path as yours
 
