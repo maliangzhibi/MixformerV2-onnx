@@ -38,7 +38,6 @@ MixformerTRT::MixformerTRT(std::string &engine_name)
     
     this->output_pred_boxes = new half_float::half[this->output_pred_boxes_size];
     this->output_pred_scores = new half_float::half[this->output_pred_scores_size];
-    // std::cout << "output_pred_boxes size: " << this->output_pred_boxes_size << " " << sizeof(*this->output_pred_boxes) << std::endl;
 }
 
 MixformerTRT::~MixformerTRT(){
@@ -110,33 +109,33 @@ void MixformerTRT::infer(
     CHECK(cudaMalloc(&buffers[inputImgsearchIndex], 3 * input_imsearch_shape.height * input_imsearch_shape.width * sizeof(half_float::half)));
     CHECK(cudaMalloc(&buffers[outputPredboxesIndex], this->output_pred_boxes_size * sizeof(half_float::half)));
     CHECK(cudaMalloc(&buffers[outputPredscoresIndex], this->output_pred_scores_size * sizeof(half_float::half)));
-    std::cout << ">>>output size>>> " << this->output_pred_boxes_size << " " << this->output_pred_scores_size << std::endl;
+    // std::cout << ">>>output size>>> " << this->output_pred_boxes_size << " " << this->output_pred_scores_size << std::endl;
     
     // create stream
     CHECK(cudaStreamCreate(&stream));
-    std::cout << "+++++++++debug 0++++++++++"<< std::endl;
+    // std::cout << "+++++++++debug 0++++++++++"<< std::endl;
     
     // DMA input batch  data to device, infer on the batch asynchronously,  and DMA output back to host
     CHECK(cudaMemcpyAsync(buffers[inputImgtIndex], input_imt, 3 * input_imt_shape.height * input_imt_shape.width * sizeof(half_float::half), cudaMemcpyHostToDevice, stream));
     CHECK(cudaMemcpyAsync(buffers[inputImgotIndex], input_imot, 3 * input_imt_shape.height * input_imt_shape.width * sizeof(half_float::half), cudaMemcpyHostToDevice, stream));
     CHECK(cudaMemcpyAsync(buffers[inputImgsearchIndex], input_imsearch, 3 * input_imsearch_shape.height * input_imsearch_shape.width * sizeof(half_float::half), cudaMemcpyHostToDevice, stream));
-    std::cout << "+++++++++debug 1++++++++++"<< std::endl;
+    // std::cout << "+++++++++debug 1++++++++++"<< std::endl;
     // inference
     context->enqueue(1, buffers, stream, nullptr);
-    std::cout << "+++++++++debug 2++++++++++"<< std::endl;
+    // std::cout << "+++++++++debug 2++++++++++"<< std::endl;
     CHECK(cudaMemcpyAsync(output_pred_boxes, buffers[outputPredboxesIndex], this->output_pred_boxes_size * sizeof(half_float::half), cudaMemcpyDeviceToHost, stream));
-    std::cout << "+++++++++debug 2-1++++++++++"<< std::endl;
+    // std::cout << "+++++++++debug 2-1++++++++++"<< std::endl;
     CHECK(cudaMemcpyAsync(output_pred_scores, buffers[outputPredscoresIndex], this->output_pred_scores_size * sizeof(half_float::half), cudaMemcpyDeviceToHost, stream));
-    std::cout << "+++++++++debug 3++++++++++"<< std::endl;
+    // std::cout << "+++++++++debug 3++++++++++"<< std::endl;
     cudaStreamSynchronize(stream);
-    std::cout << "+++++++++debug 3-1++++++++++"<< std::endl;
+    // std::cout << "+++++++++debug 3-1++++++++++"<< std::endl;
     // release buffers
     CHECK(cudaFree(buffers[inputImgtIndex]));
     CHECK(cudaFree(buffers[inputImgotIndex]));
     CHECK(cudaFree(buffers[inputImgsearchIndex]));
     CHECK(cudaFree(buffers[outputPredboxesIndex]));
     CHECK(cudaFree(buffers[outputPredscoresIndex]));
-    std::cout << "+++++++++debug 4++++++++++"<< std::endl;
+    // std::cout << "+++++++++debug 4++++++++++"<< std::endl;
 }
 
 // put z and x into transform
