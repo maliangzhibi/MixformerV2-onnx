@@ -95,7 +95,7 @@ class Preprocessor_wo_mask(object):
         img_tensor_norm = ((img_tensor / 255.0) - self.mean) / self.std  # (1,3,H,W)
         return img_tensor_norm.contiguous()
 
-class MFTrackerORT:
+class MFTrackerTRT:
     def __init__(self) -> None:
         self.debug = True        
         
@@ -151,7 +151,7 @@ class MFTrackerORT:
         x_patch_arr, resize_factor, x_amask_arr = self.sample_target(image, self.state, self.search_factor,
                                                                 output_sz=self.search_size)  # (x1, y1, w, h)
         search = self.preprocessor.process(x_patch_arr)
-        print(f">>>search: {type(search)}")
+        print(f">>>search: {search.shape}")
         # compute trt output prediction
         trt_outputs = self.mixformer_tracker.infer(self.template, self.online_template, search)
         # print(f">>> lenght trt_outputs: {trt_outputs}")
@@ -294,43 +294,51 @@ class MFTrackerORT:
         
 if __name__ == '__main__':
     print("测试")
-    Tracker = MFTrackerORT()
+    Tracker = MFTrackerTRT()
     Tracker.video_name = "/home/nhy/lsm/dataset/target.mp4"
+    # init_state = [282, 250, 23, 23]
+
+    # warm_up = 500
+    # warm_up_first = True
+    # input0= torch.rand((112, 112, 3)).numpy()
+    # input1= torch.rand((224, 224, 3)).numpy()
+    # for i in range(warm_up):
+    #     if warm_up_first == True:
+    #         Tracker.track_init(input0, [20, 20], [50, 50])
+    #         warm_up_first = False
+    #     else:
+    #         state = Tracker.track(input1)
 
     first_frame = True
-
     if Tracker.video_name:
         video_name = Tracker.video_name
     else:
         video_name = 'webcam'
-    cv2.namedWindow(video_name, cv2.WND_PROP_FULLSCREEN)
-    print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+
     frame_id = 0
     total_time = 0
     for frame in get_frames(Tracker.video_name):
-        # print(f"frame shape {frame.shape}")
+        print(f"frame shape {frame.shape} {type(frame)}")
         tic = cv2.getTickCount()
         if first_frame:
             x, y, w, h = cv2.selectROI(video_name, frame, fromCenter=False)
-
+            print(f">>>init state: {(x, y, w, h)}")
             target_pos = [x, y]
             target_sz = [w, h]
-            # print('====================type=================', target_pos, type(target_pos), type(target_sz))
+            # target_pos = [init_state[0], init_state[1]]
+            # target_sz = [init_state[2], init_state[3]]
             Tracker.track_init(frame, target_pos, target_sz)
             first_frame = False
         else:
             state = Tracker.track(frame)
-            
-            # draw_trace(frame, Tracker.trace_list)
-            # draw_circle(frame, Tracker.state['target_pos'])
             frame_id += 1
 
         toc = cv2.getTickCount() - tic
         toc = int(1 / (toc / cv2.getTickFrequency()))
         total_time += toc
         print('Video: {:12s} {:3.1f}fps'.format('tracking', toc))
-        # cv2.imshow('Tracking', frame)
-        # cv2.waitKey(1)
+        cv2.imshow('Tracking', frame)
+        cv2.waitKey(1)
     
     print('video: average {:12s} {:3.1f} fps'.format('finale average tracking fps', total_time/(frame_id - 1)))
     cv2.destroyAllWindows()
