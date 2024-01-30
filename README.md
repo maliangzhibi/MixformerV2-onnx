@@ -31,8 +31,18 @@ $ cd /home/code/Mixformerv2-onnx
 $ ./mixformer-onnx [model_path] [videopath(file or camera)]
 ```
 
-# 2. MixformerV2 TensorRT version inference in python
+# 2. MixformerV2 TensorRT version inference in CPP and python
+Assume that you have configured Tensorrt, use onnx2trt to convert the onnx model to engine on your GPU platform, and then start compilation and execution.
 
+## cpp version 
+build and run
+```
+$ cd Mixformerv2-onnx
+$ mkdir build && cd build
+$ cmake .. && make
+& ./mixformer-trt ../model/mixformer_v2_sim.engine ../target.mp4
+```
+## python trt version
 Modify the video path in Mixformerv2-onnx/mixformer-pytrt/mf_tracker_trt.py，and mkdir model file_dir, then download the onnx file and put onnx file into file_dir.
 ```
 $ cd Mixformerv2-onnx
