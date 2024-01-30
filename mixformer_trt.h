@@ -90,13 +90,6 @@ private:
 
     cudaStream_t stream;
 
-    //  // hardcode input node names
-    // unsigned int num_inputs = 3;
-    // std::vector<const char *> input_node_names = {
-    //     "img_t",
-    //     "img_ot",
-    //     "img_search"
-    // };
     // init dynamic input dims
     std::vector<std::vector<int64_t>> input_node_dims = {
         {1, 3, 112, 112}, // z  (b=1,c,h,w)
@@ -108,12 +101,6 @@ private:
     const float mean_vals[3] = {0.485f * 255.f, 0.456f * 255.f, 0.406f * 255.f};  // RGB
     const float norm_vals[3] = {1 / 0.229f / 255.f, 1 / 0.224f / 255.f, 1 / 0.225f / 255.f};
 
-    // Define FP16 mean and scale values
-    // float means_fp16[3] = {float(0.406*255), float(0.485*255), float(0.456*255)};
-    // float norms_fp16[3] = {float(1/(0.225*255)), float(1/(0.229*255)), float(1/(0.224*255))};
-
-    // const float means[3]  = {0.485, 0.456, 0.406}; // BGR
-    // const float norms[3] = {0.229, 0.224, 0.225}; // BGR
     float max_pred_score = -1.f;
     float max_score_decay = 1.f;
 
@@ -143,16 +130,8 @@ private:
     static const int INPUT_IMOT_H = 112;
     static const int INPUT_IMSEARCH_H = 224;
 
-    // float* blob_imt = nullptr;
-    // float* blob_imot = nullptr;
-    // float* blob_imsearch = nullptr;
-
-// protected:
-//     const unsigned int num_threads; // initialize at runtime.
-
 private:
 
-    // void transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x);
     void transform(cv::Mat &mat_z, cv::Mat &mat_oz, cv::Mat &mat_x);
 
     void map_box_back(DrBBox &pred_box, float resize_factor);
@@ -162,8 +141,6 @@ private:
     void cal_bbox(float *boxes_ptr, float * scores_ptr, DrBBox &pred_box, float &max_score, float resize_factor);
 
     void sample_target(const cv::Mat &im, cv::Mat &croped, DrBBox target_bb, float search_area_factor, int output_sz, float &resize_factor);
-
-    // float fp16_to_float(float value);
 
 public:
 
@@ -181,18 +158,6 @@ public:
     // config static
     Config cfg; 
 
-    // cv::Mat normalize(const cv::Mat &mat, float mean, float scale);
-
-    // cv::Mat normalize(const cv::Mat &mat, const float mean[3], const float scale[3]);
-
-    // void normalize(const cv::Mat &inmat, cv::Mat &outmat, float mean, float scale);
-
-    // void normalize_inplace(cv::Mat &mat_inplace, float mean, float scale);
-
-    // void normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3]);
-
-    // void normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3]);
-
     void deserialize_engine(std::string &engine_name);
 
     void infer(
@@ -206,15 +171,11 @@ public:
         cv::Size input_imsearch_shape);
     
     void blob_from_image_half(cv::Mat& img, float* output_data);
-    void blob_from_image_half(cv::Mat& img, cv::Mat &imgot, cv::Mat &imgx);
-    // void convertMatToFP16(cv::Mat& mat, float* fp16Data);
 
-    // void preprocessor_img(cv::Mat &img, float* output_data);
-    // void preprocessor_img(cv::Mat &img);
-    // void preprocessor_img(cv::Mat& img, cv::Mat &imgot, cv::Mat &imgx);
+    void blob_from_image_half(cv::Mat& img, cv::Mat &imgot, cv::Mat &imgx);
+    
     void half_norm(const cv::Mat &img, float* input_data);
 
-// private:
     
 };
 

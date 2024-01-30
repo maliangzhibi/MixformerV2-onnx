@@ -21,11 +21,6 @@ MixformerTRT::MixformerTRT(std::string &engine_name)
 {
     // deserialize engine
     this->deserialize_engine(engine_name);
-    
-    // // 分配内存给输入和输出
-    // this->input_imt = new half_float::half[cfg.template_size * cfg.template_size * 3];
-    // this->input_imot = new half_float::half[cfg.template_size * cfg.template_size * 3];
-    // this->input_imsearch = new half_float::half[cfg.search_size * cfg.search_size * 3];
 
     auto out_dims_0 = this->engine->getBindingDimensions(3);
     for(int j=0; j < out_dims_0.nbDims; j++)
@@ -39,9 +34,7 @@ MixformerTRT::MixformerTRT(std::string &engine_name)
     {
         this->output_pred_scores_size *= out_dims_1.d[j];
     }
-    // this->output_pred_scores = new half_float::half[this->output_pred_scores_size];
-    // std::cout << "output_pred_bbox_size: " << this->output_pred_boxes_size << std::endl;
-    // std::cout << "output_pred_bbox_score: " << this->output_pred_scores_size << std::endl;
+
     this->output_pred_boxes = new float[this->output_pred_boxes_size];
     this->output_pred_scores = new float[this->output_pred_scores_size];
     
@@ -98,7 +91,7 @@ void MixformerTRT::infer(
     void* buffers[5];
     
     const int inputImgtIndex = engine->getBindingIndex(INPUT_BLOB_IMGT_NAME);
-    std::cout << ">>>debug infer start. " << (engine->getBindingDataType(inputImgtIndex) == nvinfer1::DataType::kFLOAT) << std::endl;
+    // std::cout << ">>>debug infer start. " << (engine->getBindingDataType(inputImgtIndex) == nvinfer1::DataType::kFLOAT) << std::endl;
     assert(engine->getBindingDataType(inputImgtIndex) == nvinfer1::DataType::kFLOAT);
     const int inputImgotIndex = engine->getBindingIndex(INPUT_BLOB_IMGOT_NAME);
     assert(engine->getBindingDataType(inputImgotIndex) == nvinfer1::DataType::kFLOAT);
@@ -140,11 +133,10 @@ void MixformerTRT::infer(
     CHECK(cudaFree(buffers[inputImgsearchIndex]));
     CHECK(cudaFree(buffers[outputPredboxesIndex]));
     CHECK(cudaFree(buffers[outputPredscoresIndex]));
-    std::cout << ">>>debug infer end. "  << std::endl;
+    // std::cout << ">>>debug infer end. "  << std::endl;
 }
 
 // put z and x into transform
-// void  MixformerTRT::transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x)
 void  MixformerTRT::transform(cv::Mat &mat_z, cv::Mat &mat_oz, cv::Mat &mat_x)
 {
     this->blob_from_image_half(mat_z, mat_oz, mat_x);
@@ -162,10 +154,6 @@ void MixformerTRT::blob_from_image_half(cv::Mat& img, cv::Mat &imgot, cv::Mat &i
     cvtColor(imgot, imot_t, cv::COLOR_BGR2RGB);
     cvtColor(imgx, imx_t, cv::COLOR_BGR2RGB);
 
-    // img = imt_t.clone();
-    // imgot = imot_t.clone();
-    // imgx = imx_t.clone();
-
     // 需及时释放
     this->input_imt = new float[img.total() * 3]; // Use __fp16 data type for blob array
     this->input_imot = new float[imgot.total() * 3]; // Use __fp16 data type for blob array
@@ -182,9 +170,6 @@ void MixformerTRT::half_norm(const cv::Mat &img, float* input_data)
     int img_h = img.rows;
     int img_w = img.cols;
 
-    // std::vector<float> meanb = {0.485, 0.456, 0.406}; //RGB
-    // std::vector<float> std_var = {0.229, 0.224, 0.225};
-
     cv::Mat img_cp;
     img_cp = img.clone();
     
@@ -193,74 +178,12 @@ void MixformerTRT::half_norm(const cv::Mat &img, float* input_data)
             for (size_t w = 0; w < img_w; w++) {
                 input_data[c * img_w * img_h + h * img_w + w] = 
                     cv::saturate_cast<float>((((float)img_cp.at<cv::Vec3b>(h, w)[c]) - mean_vals[c]) * norm_vals[c]);
-                    // cv::saturate_cast<half_float::half>((((float)img_cp.at<cv::Vec3b>(h, w)[c])/255.0f - meanb[c]) / std_var[c]);
             }
         }
     }
 
 }
 
-// void MixformerTRT::preprocessor_img(cv::Mat &img, half_float::half* output_data)
-// void MixformerTRT::preprocessor_img(cv::Mat &img)
-// {
-//     std::cout << ">>>debug img type 0: " << (img.type()==CV_16FC3) << std::endl;
-//     // Convert BGR to RGB
-//     cv::Mat img_rgb;
-//     cv::cvtColor(img, img_rgb, cv::COLOR_BGR2RGB);
-//     // img = img_rgb.clone();
-//     // cv::imshow("deb", img);
-//     // cv::waitKey(500);
-//     std::cout << ">>>debug img type1: " << (img.type()==CV_16FC3) << std::endl;
-//     this->normalize_inplace(img_rgb, means_fp16, norms_fp16);
-//     std::cout << ">>>debug img type2: " << (img.type()==CV_16FC3) << std::endl;
-//     img = img_rgb;
-// }
-
-// void MixformerTRT::normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3])
-// {
-//     std::cout<< ">>>debug>>> normalize_inplace0." << std::endl;
-//     if (mat_inplace.type() != CV_16FC3){
-//         std::cout<< ">>>debug>>> normalize_inplace0." << std::endl;
-//         cv::imshow("nin", mat_inplace);
-//         cv::waitKey(5000);
-//         mat_inplace.convertTo(mat_inplace, CV_16FC3);
-//         std::cout<< ">>>debug>>> normalize_inplace1." << std::endl;
-//     }
-    
-//     for (unsigned int i = 0; i < mat_inplace.rows; ++i)
-//     {
-//         cv::Vec3f *p = mat_inplace.ptr<cv::Vec3f>(i);
-//         for (unsigned int j = 0; j < mat_inplace.cols; ++j)
-//         {
-//             p[j][0] = (p[j][0] - mean[0]) * scale[0];
-//             p[j][1] = (p[j][1] - mean[1]) * scale[1];
-//             p[j][2] = (p[j][2] - mean[2]) * scale[2];
-//         }
-//     }
-// }
-
-// void MixformerTRT::convertMatToFP16(cv::Mat& mat, float* fp16Data) {
-//     // 检查输入图像的数据类型是否为 CV_16FC3
-//     if (mat.type() != CV_16FC3) {
-//         std::cerr << "Input image data type is not CV_16FC3." << std::endl;
-//         return; // 返回错误或采取适当的处理
-//     }
-
-//     // 获取图像的高度和宽度
-//     int height = mat.rows;
-//     int width = mat.cols;
-
-//     // 遍历图像并将数据转换为 FP16 存储在 fp16Data 中
-//     for (int y = 0; y < height; ++y) {
-//         for (int x = 0; x < width; ++x) {
-//             cv::Vec3f pixel = mat.at<cv::Vec3f>(y, x);
-//             for (int c = 0; c < 3; ++c) {
-//                 // 将 CV_16FC3 中的每个通道数据转换为 FP16 存储
-//                 fp16Data[(y * width + x) * 3 + c] = float(pixel[c]);
-//             }
-//         }
-//     }
-// }
 
 void MixformerTRT::blob_from_image_half(cv::Mat& img, float* input_blob_half) {
     int channels = 3;
@@ -309,15 +232,6 @@ const DrOBB &MixformerTRT::track(const cv::Mat &img)
     cv::Size input_imot_shape = this->oz_patch.size();
     cv::Size input_imsearch_shape = x_patch.size();
     
-    // cv::Mat inputMatT = input_zx.at(0);
-    // cv::Mat inputMatOt = input_zx.at(1);
-    // cv::Mat inputMatSearch = input_zx.at(2);
-    
-    // // 获取指向图像数据的指针
-    // float* inputPtrT = reinterpret_cast<float*>(inputMatT.data);
-    // float* inputPtrOt = reinterpret_cast<float*>(inputMatOt.data);
-    // float* inputPtrSearch = reinterpret_cast<float*>(inputMatSearch.data);    
-    // std::cout << ">>>debug img type 0: " << input_imt_shape.height << std::endl;
     this->infer(input_imt, input_imot, input_imsearch, 
               output_pred_boxes, output_pred_scores, 
               input_imt_shape, input_imot_shape, 
@@ -326,16 +240,10 @@ const DrOBB &MixformerTRT::track(const cv::Mat &img)
     delete[] this->input_imt;
     delete[] this->input_imot;
     delete[] this->input_imsearch;
-    // std::cout << "+++++++++debug++++++++++" << std::endl;
-    // std::cout << "开始跟踪2: " << std::endl;
-    // std::cout << ">>>debug img type 1: "  << std::endl;
+
     DrBBox pred_box;
     float pred_score;
-    // std::cout << "after infer cx cy w h: "
-    //         << output_pred_boxes[0]<< " " 
-    //         << output_pred_boxes[1] << " "
-    //         << output_pred_boxes[2] << " "
-    //         << output_pred_boxes[3] << std::endl;
+
     this->cal_bbox(output_pred_boxes, output_pred_scores, pred_box, pred_score, resize_factor);
     
     this->map_box_back(pred_box, resize_factor);
@@ -455,62 +363,7 @@ void MixformerTRT::sample_target(const cv::Mat &im, cv::Mat &croped, DrBBox targ
    resize_factor = output_sz * 1.f / crop_sz;
 }
 
-// cv::Mat MixformerTRT::normalize(const cv::Mat &mat, float mean, float scale)
-// {
-//   cv::Mat matf;
-//   if (mat.type() != CV_32FC3) mat.convertTo(matf, CV_32FC3);
-//   else matf = mat; // reference
-//   return (matf - mean) * scale;
-// }
 
-// cv::Mat MixformerTRT::normalize(const cv::Mat &mat, const float mean[3], const float scale[3])
-// {
-//   cv::Mat mat_copy;
-//   if (mat.type() != CV_32FC3) mat.convertTo(mat_copy, CV_32FC3);
-//   else mat_copy = mat.clone();
-//   for (unsigned int i = 0; i < mat_copy.rows; ++i)
-//   {
-//     cv::Vec3f *p = mat_copy.ptr<cv::Vec3f>(i);
-//     for (unsigned int j = 0; j < mat_copy.cols; ++j)
-//     {
-//       p[j][0] = (p[j][0] - mean[0]) * scale[0];
-//       p[j][1] = (p[j][1] - mean[1]) * scale[1];
-//       p[j][2] = (p[j][2] - mean[2]) * scale[2];
-//     }
-//   }
-//   return mat_copy;
-// }
-
-// void MixformerTRT::normalize(const cv::Mat &inmat, cv::Mat &outmat, float mean, float scale)
-// {
-//   outmat = this->normalize(inmat, mean, scale);
-// }
-
-// void MixformerTRT::normalize_inplace(cv::Mat &mat_inplace, float mean, float scale)
-// {
-//   if (mat_inplace.type() != CV_32FC3) mat_inplace.convertTo(mat_inplace, CV_32FC3);
-//   this->normalize(mat_inplace, mat_inplace, mean, scale);
-// }
-
-// void MixformerTRT::normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3])
-// {
-//   if (mat_inplace.type() != CV_32FC3) mat_inplace.convertTo(mat_inplace, CV_32FC3);
-//   for (unsigned int i = 0; i < mat_inplace.rows; ++i)
-//   {
-//     cv::Vec3f *p = mat_inplace.ptr<cv::Vec3f>(i);
-//     for (unsigned int j = 0; j < mat_inplace.cols; ++j)
-//     {
-//       p[j][0] = (p[j][0] - mean[0]) * scale[0];
-//       p[j][1] = (p[j][1] - mean[1]) * scale[1];
-//       p[j][2] = (p[j][2] - mean[2]) * scale[2];
-//     }
-//   }
-// }
-
-// float MixformerTRT::fp16_to_float(float value)
-// {
-//     return static_cast<float>(value);
-// }
 
 
 
