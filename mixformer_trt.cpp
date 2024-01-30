@@ -22,6 +22,11 @@ MixformerTRT::MixformerTRT(std::string &engine_name)
     // deserialize engine
     this->deserialize_engine(engine_name);
     
+    // // 分配内存给输入和输出
+    // this->input_imt = new half_float::half[cfg.template_size * cfg.template_size * 3];
+    // this->input_imot = new half_float::half[cfg.template_size * cfg.template_size * 3];
+    // this->input_imsearch = new half_float::half[cfg.search_size * cfg.search_size * 3];
+
     auto out_dims_0 = this->engine->getBindingDimensions(3);
     for(int j=0; j < out_dims_0.nbDims; j++)
     {
@@ -35,9 +40,11 @@ MixformerTRT::MixformerTRT(std::string &engine_name)
         this->output_pred_scores_size *= out_dims_1.d[j];
     }
     // this->output_pred_scores = new half_float::half[this->output_pred_scores_size];
+    // std::cout << "output_pred_bbox_size: " << this->output_pred_boxes_size << std::endl;
+    // std::cout << "output_pred_bbox_score: " << this->output_pred_scores_size << std::endl;
+    this->output_pred_boxes = new float[this->output_pred_boxes_size];
+    this->output_pred_scores = new float[this->output_pred_scores_size];
     
-    this->output_pred_boxes = new half_float::half[this->output_pred_boxes_size];
-    this->output_pred_scores = new half_float::half[this->output_pred_scores_size];
 }
 
 MixformerTRT::~MixformerTRT(){
@@ -51,11 +58,11 @@ MixformerTRT::~MixformerTRT(){
 }
 
 void MixformerTRT::deserialize_engine(std::string &engine_name){
-   // create a model using the API directly and serialize it to a stream
+    // create a model using the API directly and serialize it to a stream
     // char *trt_model_stream{nullptr};
     std::ifstream file(engine_name, std::ios::binary);
-    if (file.good()) 
-    {
+    if (file.good())
+    {  
         file.seekg(0, file.end);
         size = file.tellg();
         file.seekg(0, file.beg);
@@ -78,148 +85,210 @@ void MixformerTRT::deserialize_engine(std::string &engine_name){
 }
 
 void MixformerTRT::infer(
-    half_float::half *input_imt,
-    half_float::half *input_imot,
-    half_float::half *input_imsearch,
-    half_float::half *output_pred_boxes,
-    half_float::half *output_pred_scores,
+    float *input_imt,
+    float *input_imot,
+    float *input_imsearch,
+    float *output_pred_boxes,
+    float *output_pred_scores,
     cv::Size input_imt_shape,
+    cv::Size input_imot_shape,
     cv::Size input_imsearch_shape)
 {
     assert(engine->getNbBindings() == 5);
     void* buffers[5];
     
     const int inputImgtIndex = engine->getBindingIndex(INPUT_BLOB_IMGT_NAME);
-    assert(engine->getBindingDataType(inputImgtIndex) == nvinfer1::DataType::kHALF);
+    std::cout << ">>>debug infer start. " << (engine->getBindingDataType(inputImgtIndex) == nvinfer1::DataType::kFLOAT) << std::endl;
+    assert(engine->getBindingDataType(inputImgtIndex) == nvinfer1::DataType::kFLOAT);
     const int inputImgotIndex = engine->getBindingIndex(INPUT_BLOB_IMGOT_NAME);
-    assert(engine->getBindingDataType(inputImgotIndex) == nvinfer1::DataType::kHALF);
+    assert(engine->getBindingDataType(inputImgotIndex) == nvinfer1::DataType::kFLOAT);
     const int inputImgsearchIndex = engine->getBindingIndex(INPUT_BLOB_IMGSEARCH_NAME);
-    assert(engine->getBindingDataType(inputImgsearchIndex) == nvinfer1::DataType::kHALF);
+    assert(engine->getBindingDataType(inputImgsearchIndex) == nvinfer1::DataType::kFLOAT);
 
     const int outputPredboxesIndex = engine->getBindingIndex(OUTPUT_BLOB_PREDBOXES_NAME);
-    assert(engine->getBindingDataType(outputPredboxesIndex) == nvinfer1::DataType::kHALF);
+    assert(engine->getBindingDataType(outputPredboxesIndex) == nvinfer1::DataType::kFLOAT);
     const int outputPredscoresIndex = engine->getBindingIndex(OUTPUT_BLOB_PREDSCORES_NAME);
-    assert(engine->getBindingDataType(outputPredscoresIndex) == nvinfer1::DataType::kHALF);
+    assert(engine->getBindingDataType(outputPredscoresIndex) == nvinfer1::DataType::kFLOAT);
 
     int mBatchSize = engine->getMaxBatchSize();
     
     // create gpu buffer on devices
-    CHECK(cudaMalloc(&buffers[inputImgtIndex], 3 * input_imt_shape.height * input_imt_shape.width * sizeof(half_float::half)));
-    CHECK(cudaMalloc(&buffers[inputImgotIndex], 3 * input_imt_shape.height * input_imt_shape.width * sizeof(half_float::half)));
-    CHECK(cudaMalloc(&buffers[inputImgsearchIndex], 3 * input_imsearch_shape.height * input_imsearch_shape.width * sizeof(half_float::half)));
-    CHECK(cudaMalloc(&buffers[outputPredboxesIndex], this->output_pred_boxes_size * sizeof(half_float::half)));
-    CHECK(cudaMalloc(&buffers[outputPredscoresIndex], this->output_pred_scores_size * sizeof(half_float::half)));
-    // std::cout << ">>>output size>>> " << this->output_pred_boxes_size << " " << this->output_pred_scores_size << std::endl;
-    
+    CHECK(cudaMalloc(&buffers[inputImgtIndex], 3 * input_imt_shape.height * input_imt_shape.width * sizeof(float)));
+    CHECK(cudaMalloc(&buffers[inputImgotIndex], 3 * input_imot_shape.height * input_imot_shape.width * sizeof(float)));
+    CHECK(cudaMalloc(&buffers[inputImgsearchIndex], 3 * input_imsearch_shape.height * input_imsearch_shape.width * sizeof(float)));
+    CHECK(cudaMalloc(&buffers[outputPredboxesIndex], this->output_pred_boxes_size * sizeof(float)));
+    CHECK(cudaMalloc(&buffers[outputPredscoresIndex], this->output_pred_scores_size * sizeof(float)));
+   
     // create stream
     CHECK(cudaStreamCreate(&stream));
-    // std::cout << "+++++++++debug 0++++++++++"<< std::endl;
-    
+       
     // DMA input batch  data to device, infer on the batch asynchronously,  and DMA output back to host
-    CHECK(cudaMemcpyAsync(buffers[inputImgtIndex], input_imt, 3 * input_imt_shape.height * input_imt_shape.width * sizeof(half_float::half), cudaMemcpyHostToDevice, stream));
-    CHECK(cudaMemcpyAsync(buffers[inputImgotIndex], input_imot, 3 * input_imt_shape.height * input_imt_shape.width * sizeof(half_float::half), cudaMemcpyHostToDevice, stream));
-    CHECK(cudaMemcpyAsync(buffers[inputImgsearchIndex], input_imsearch, 3 * input_imsearch_shape.height * input_imsearch_shape.width * sizeof(half_float::half), cudaMemcpyHostToDevice, stream));
-    // std::cout << "+++++++++debug 1++++++++++"<< std::endl;
+    CHECK(cudaMemcpyAsync(buffers[inputImgtIndex], input_imt, 3 * input_imt_shape.height * input_imt_shape.width * sizeof(float), cudaMemcpyHostToDevice, stream));
+    CHECK(cudaMemcpyAsync(buffers[inputImgotIndex], input_imot, 3 * input_imot_shape.height * input_imot_shape.width * sizeof(float), cudaMemcpyHostToDevice, stream));
+    CHECK(cudaMemcpyAsync(buffers[inputImgsearchIndex], input_imsearch, 3 * input_imsearch_shape.height * input_imsearch_shape.width * sizeof(float), cudaMemcpyHostToDevice, stream));
+    
     // inference
-    context->enqueue(1, buffers, stream, nullptr);
-    // std::cout << "+++++++++debug 2++++++++++"<< std::endl;
-    CHECK(cudaMemcpyAsync(output_pred_boxes, buffers[outputPredboxesIndex], this->output_pred_boxes_size * sizeof(half_float::half), cudaMemcpyDeviceToHost, stream));
-    // std::cout << "+++++++++debug 2-1++++++++++"<< std::endl;
-    CHECK(cudaMemcpyAsync(output_pred_scores, buffers[outputPredscoresIndex], this->output_pred_scores_size * sizeof(half_float::half), cudaMemcpyDeviceToHost, stream));
-    // std::cout << "+++++++++debug 3++++++++++"<< std::endl;
+    context->enqueue(mBatchSize, buffers, stream, nullptr);
+    
+    CHECK(cudaMemcpyAsync(output_pred_boxes, buffers[outputPredboxesIndex], this->output_pred_boxes_size * sizeof(float), cudaMemcpyDeviceToHost, stream));
+    CHECK(cudaMemcpyAsync(output_pred_scores, buffers[outputPredscoresIndex], this->output_pred_scores_size * sizeof(float), cudaMemcpyDeviceToHost, stream));
     cudaStreamSynchronize(stream);
-    // std::cout << "+++++++++debug 3-1++++++++++"<< std::endl;
+    
     // release buffers
     CHECK(cudaFree(buffers[inputImgtIndex]));
     CHECK(cudaFree(buffers[inputImgotIndex]));
     CHECK(cudaFree(buffers[inputImgsearchIndex]));
     CHECK(cudaFree(buffers[outputPredboxesIndex]));
     CHECK(cudaFree(buffers[outputPredscoresIndex]));
-    // std::cout << "+++++++++debug 4++++++++++"<< std::endl;
+    std::cout << ">>>debug infer end. "  << std::endl;
 }
 
 // put z and x into transform
-void  MixformerTRT::transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x)
+// void  MixformerTRT::transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x)
+void  MixformerTRT::transform(cv::Mat &mat_z, cv::Mat &mat_oz, cv::Mat &mat_x)
 {
-    cv::Mat z = mat_z.clone();
-    cv::Mat oz = mat_oz.clone();
-    cv::Mat x = mat_x.clone();
-
-    cv::cvtColor(z, z, cv::COLOR_BGR2RGB);
-    cv::cvtColor(oz, oz, cv::COLOR_BGR2RGB);
-    cv::cvtColor(x, x, cv::COLOR_BGR2RGB);
-    // z.convertTo(z, CV_32FC3, 1. / 255.f, 0.f);
-    // x.convertTo(x, CV_32FC3, 1. / 255.f, 0.f);
-    
-    this->normalize_inplace(z, means, norms); // float32
-    this->normalize_inplace(oz, means, norms); // float32
-    this->normalize_inplace(x, means, norms); // float32
-    
-    input_imt = blob_from_image_half(z);
-    input_imot = blob_from_image_half(oz);
-    input_imsearch = blob_from_image_half(x);
-    // // 输出数组的内容
-    // int total_elements = 150528; // 假设这是数组的总元素数
-
-    // for (int i = 0; i < total_elements; ++i) {
-    //     // 使用 to_float() 将 half 类型转换为 float 类型进行输出
-    //     std::cout << "Element " << i << ": hahaha" << std::endl;
-    //     float element_as_float = static_cast<float>(input_imsearch[i]);
-    //     std::cout << "Element " << i << ": " << element_as_float << std::endl;
-    // }
-    // std::vector<cv::Mat> input_tensors;
-
-    // input_tensors.emplace_back(z);
-
-    // input_tensors.emplace_back(oz);
-
-    // input_tensors.emplace_back(x);
-
-    // return input_tensors;
+    this->blob_from_image_half(mat_z, mat_oz, mat_x);
 }
 
-half_float::half* MixformerTRT::blob_from_image_half(cv::Mat& img) {
-    cvtColor(img, img, cv::COLOR_BGR2RGB);
-    // cv::imshow("deb", img);
-    // cv::waitKey(100);
+void MixformerTRT::blob_from_image_half(cv::Mat& img, cv::Mat &imgot, cv::Mat &imgx) {
+    cv::Mat imt_t;
+    cv::Mat imot_t;
+    cv::Mat imx_t;
+    // cv::imshow("BGR", img);
+    // cv::waitKey(500);
+    cvtColor(img, imt_t, cv::COLOR_BGR2RGB);
+    // cv::imshow("RGB", imt_t);
+    // cv::waitKey(500);
+    cvtColor(imgot, imot_t, cv::COLOR_BGR2RGB);
+    cvtColor(imgx, imx_t, cv::COLOR_BGR2RGB);
+
+    // img = imt_t.clone();
+    // imgot = imot_t.clone();
+    // imgx = imx_t.clone();
+
+    // 需及时释放
+    this->input_imt = new float[img.total() * 3]; // Use __fp16 data type for blob array
+    this->input_imot = new float[imgot.total() * 3]; // Use __fp16 data type for blob array
+    this->input_imsearch = new float[imgx.total() * 3]; // Use __fp16 data type for blob array
+
+    half_norm(imt_t, this->input_imt);
+    half_norm(imot_t, this->input_imot);
+    half_norm(imx_t, this->input_imsearch);
+}
+
+void MixformerTRT::half_norm(const cv::Mat &img, float* input_data)
+{
     int channels = 3;
     int img_h = img.rows;
     int img_w = img.cols;
-    // std::vector<float> mean = {0.485, 0.456, 0.406};
+
+    // std::vector<float> meanb = {0.485, 0.456, 0.406}; //RGB
     // std::vector<float> std_var = {0.229, 0.224, 0.225};
-    // std::cout << "+++++++++debug 0++++++++++ "<< img_h<< std::endl;
-    // 需及时释放
-    half_float::half* input_blob_half = new half_float::half[img.total() * 3]; // Use __fp16 data type for blob array
-    // std::cout << ">>> img input_imt: " << input_imt << std::endl;
+
+    cv::Mat img_cp;
+    img_cp = img.clone();
+    
     for (size_t c = 0; c < channels; c++) {
         for (size_t h = 0; h < img_h; h++) {
             for (size_t w = 0; w < img_w; w++) {
-                input_blob_half[c * img_w * img_h + h * img_w + w] =
+                input_data[c * img_w * img_h + h * img_w + w] = 
+                    cv::saturate_cast<float>((((float)img_cp.at<cv::Vec3b>(h, w)[c]) - mean_vals[c]) * norm_vals[c]);
+                    // cv::saturate_cast<half_float::half>((((float)img_cp.at<cv::Vec3b>(h, w)[c])/255.0f - meanb[c]) / std_var[c]);
+            }
+        }
+    }
+
+}
+
+// void MixformerTRT::preprocessor_img(cv::Mat &img, half_float::half* output_data)
+// void MixformerTRT::preprocessor_img(cv::Mat &img)
+// {
+//     std::cout << ">>>debug img type 0: " << (img.type()==CV_16FC3) << std::endl;
+//     // Convert BGR to RGB
+//     cv::Mat img_rgb;
+//     cv::cvtColor(img, img_rgb, cv::COLOR_BGR2RGB);
+//     // img = img_rgb.clone();
+//     // cv::imshow("deb", img);
+//     // cv::waitKey(500);
+//     std::cout << ">>>debug img type1: " << (img.type()==CV_16FC3) << std::endl;
+//     this->normalize_inplace(img_rgb, means_fp16, norms_fp16);
+//     std::cout << ">>>debug img type2: " << (img.type()==CV_16FC3) << std::endl;
+//     img = img_rgb;
+// }
+
+// void MixformerTRT::normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3])
+// {
+//     std::cout<< ">>>debug>>> normalize_inplace0." << std::endl;
+//     if (mat_inplace.type() != CV_16FC3){
+//         std::cout<< ">>>debug>>> normalize_inplace0." << std::endl;
+//         cv::imshow("nin", mat_inplace);
+//         cv::waitKey(5000);
+//         mat_inplace.convertTo(mat_inplace, CV_16FC3);
+//         std::cout<< ">>>debug>>> normalize_inplace1." << std::endl;
+//     }
+    
+//     for (unsigned int i = 0; i < mat_inplace.rows; ++i)
+//     {
+//         cv::Vec3f *p = mat_inplace.ptr<cv::Vec3f>(i);
+//         for (unsigned int j = 0; j < mat_inplace.cols; ++j)
+//         {
+//             p[j][0] = (p[j][0] - mean[0]) * scale[0];
+//             p[j][1] = (p[j][1] - mean[1]) * scale[1];
+//             p[j][2] = (p[j][2] - mean[2]) * scale[2];
+//         }
+//     }
+// }
+
+// void MixformerTRT::convertMatToFP16(cv::Mat& mat, float* fp16Data) {
+//     // 检查输入图像的数据类型是否为 CV_16FC3
+//     if (mat.type() != CV_16FC3) {
+//         std::cerr << "Input image data type is not CV_16FC3." << std::endl;
+//         return; // 返回错误或采取适当的处理
+//     }
+
+//     // 获取图像的高度和宽度
+//     int height = mat.rows;
+//     int width = mat.cols;
+
+//     // 遍历图像并将数据转换为 FP16 存储在 fp16Data 中
+//     for (int y = 0; y < height; ++y) {
+//         for (int x = 0; x < width; ++x) {
+//             cv::Vec3f pixel = mat.at<cv::Vec3f>(y, x);
+//             for (int c = 0; c < 3; ++c) {
+//                 // 将 CV_16FC3 中的每个通道数据转换为 FP16 存储
+//                 fp16Data[(y * width + x) * 3 + c] = float(pixel[c]);
+//             }
+//         }
+//     }
+// }
+
+void MixformerTRT::blob_from_image_half(cv::Mat& img, float* input_blob_half) {
+    int channels = 3;
+    int img_h = img.rows;
+    int img_w = img.cols;
+    for (size_t c = 0; c < channels; c++) {
+        for (size_t h = 0; h < img_h; h++) {
+            for (size_t w = 0; w < img_w; w++) {
+                input_blob_half[c * img_w * img_h + h * img_w + w] = float(img.at<cv::Vec3b>(h, w)[c]);
                     // cv::saturate_cast<half_float::half>((((float)img.at<cv::Vec3b>(h, w)[c]) / 255.0f - mean[c]) / std_var[c]);
-                    cv::saturate_cast<half_float::half>((float)img.at<cv::Vec3b>(h, w)[c]);
+                    // cv::saturate_cast<half_float::half>((float)img.at<cv::Vec3b>(h, w)[c]);
+                // std::cout << input_blob_half[c * img_w * img_h + h * img_w + w] << std::endl;
             }
         }
     }  
-    // // 输出数组的内容
-    // int total_elements = img.total() * 3; // 假设这是数组的总元素数
-    // std::cout << ">>> img total: " << total_elements << std::endl;
-    // for (int i = 0; i < total_elements; ++i) {
-    //     // 使用 to_float() 将 half 类型转换为 float 类型进行输出
-    //     std::cout << "Element " << i << ": hahaha" << std::endl;
-    //     float element_as_float = static_cast<float>(input_blob_half[i]);
-    //     std::cout << "Element " << i << ": " << element_as_float << std::endl;
-    // }
-    return input_blob_half;
 }
 
 void MixformerTRT::init(const cv::Mat &img, DrOBB bbox)
 {
     // get subwindow
-    cv::Mat z_patch;
+    cv::Mat zt_patch; 
+    cv::Mat ozt_patch;   
     float resize_factor = 1.f;
-    this->sample_target(img, z_patch, bbox.box, this->cfg.template_factor, this->cfg.template_size, resize_factor);
-    this->z_patch = z_patch;
-    this->oz_patch = z_patch;
+    this->sample_target(img, zt_patch, bbox.box, this->cfg.template_factor, this->cfg.template_size, resize_factor);
+    this->sample_target(img, ozt_patch, bbox.box, this->cfg.template_factor, this->cfg.template_size, resize_factor);
+    // cv::Mat oz_patch = z_patch.clone(); 
+    this->z_patch = zt_patch;
+    this->oz_patch = ozt_patch;
     this->state = bbox.box;
 }
 
@@ -231,14 +300,15 @@ const DrOBB &MixformerTRT::track(const cv::Mat &img)
     this->frame_id += 1;
     float resize_factor = 1.f;
     this->sample_target(img, x_patch, this->state, this->cfg.search_factor, this->cfg.search_size, resize_factor);
-
+    
     // preprocess input tensor
     this->transform(this->z_patch, this->oz_patch, x_patch);
-    
+
     // inference score， size  and offsets
     cv::Size input_imt_shape = this->z_patch.size();
+    cv::Size input_imot_shape = this->oz_patch.size();
     cv::Size input_imsearch_shape = x_patch.size();
-
+    
     // cv::Mat inputMatT = input_zx.at(0);
     // cv::Mat inputMatOt = input_zx.at(1);
     // cv::Mat inputMatSearch = input_zx.at(2);
@@ -246,15 +316,26 @@ const DrOBB &MixformerTRT::track(const cv::Mat &img)
     // // 获取指向图像数据的指针
     // float* inputPtrT = reinterpret_cast<float*>(inputMatT.data);
     // float* inputPtrOt = reinterpret_cast<float*>(inputMatOt.data);
-    // float* inputPtrSearch = reinterpret_cast<float*>(inputMatSearch.data);
-
+    // float* inputPtrSearch = reinterpret_cast<float*>(inputMatSearch.data);    
+    // std::cout << ">>>debug img type 0: " << input_imt_shape.height << std::endl;
     this->infer(input_imt, input_imot, input_imsearch, 
-              output_pred_boxes, output_pred_scores, input_imt_shape, input_imsearch_shape);
-    std::cout << "+++++++++debug++++++++++" << std::endl;
+              output_pred_boxes, output_pred_scores, 
+              input_imt_shape, input_imot_shape, 
+              input_imsearch_shape);
+    
+    delete[] this->input_imt;
+    delete[] this->input_imot;
+    delete[] this->input_imsearch;
+    // std::cout << "+++++++++debug++++++++++" << std::endl;
     // std::cout << "开始跟踪2: " << std::endl;
+    // std::cout << ">>>debug img type 1: "  << std::endl;
     DrBBox pred_box;
     float pred_score;
-    std::cout << "cx cy w h "<< sizeof(*output_pred_boxes) << std::endl;
+    // std::cout << "after infer cx cy w h: "
+    //         << output_pred_boxes[0]<< " " 
+    //         << output_pred_boxes[1] << " "
+    //         << output_pred_boxes[2] << " "
+    //         << output_pred_boxes[3] << std::endl;
     this->cal_bbox(output_pred_boxes, output_pred_scores, pred_box, pred_score, resize_factor);
     
     this->map_box_back(pred_box, resize_factor);
@@ -272,26 +353,25 @@ const DrOBB &MixformerTRT::track(const cv::Mat &img)
     {
       this->sample_target(img, this->max_oz_patch, this->state, this->cfg.template_factor, this->cfg.template_size, resize_factor);
       this->max_pred_score = pred_score;
-
     }
 
     if (this->frame_id % this->cfg.update_interval == 0)
     {
       this->oz_patch = this->max_oz_patch;
-      this->max_pred_score = -1;
+      this->max_pred_score = -1.0;
       this->max_oz_patch = this->oz_patch;
     }
-
+    
     return object_box;
 }
 
 // calculate bbox
-void MixformerTRT::cal_bbox(half_float::half *boxes_ptr, half_float::half * scores_ptr, DrBBox &pred_box, float &max_score, float resize_factor) {
+void MixformerTRT::cal_bbox(float *boxes_ptr, float * scores_ptr, DrBBox &pred_box, float &max_score, float resize_factor) {
     auto cx = boxes_ptr[0];
     auto cy = boxes_ptr[1];
     auto w = boxes_ptr[2];
     auto h = boxes_ptr[3];
-    std::cout << "cx cy w h "<< cx << " " << cy << " " << w << " " << h << std::endl;
+    std::cout << "cal_bbox cx cy w h "<< cx << " " << cy << " " << w << " " << h << std::endl;
     cx = cx * this->cfg.search_size / resize_factor;
     cy = cy * this->cfg.search_size / resize_factor;
     w = w * this->cfg.search_size / resize_factor;
@@ -375,62 +455,62 @@ void MixformerTRT::sample_target(const cv::Mat &im, cv::Mat &croped, DrBBox targ
    resize_factor = output_sz * 1.f / crop_sz;
 }
 
-cv::Mat MixformerTRT::normalize(const cv::Mat &mat, float mean, float scale)
-{
-  cv::Mat matf;
-  if (mat.type() != CV_32FC3) mat.convertTo(matf, CV_32FC3);
-  else matf = mat; // reference
-  return (matf - mean) * scale;
-}
+// cv::Mat MixformerTRT::normalize(const cv::Mat &mat, float mean, float scale)
+// {
+//   cv::Mat matf;
+//   if (mat.type() != CV_32FC3) mat.convertTo(matf, CV_32FC3);
+//   else matf = mat; // reference
+//   return (matf - mean) * scale;
+// }
 
-cv::Mat MixformerTRT::normalize(const cv::Mat &mat, const float mean[3], const float scale[3])
-{
-  cv::Mat mat_copy;
-  if (mat.type() != CV_32FC3) mat.convertTo(mat_copy, CV_32FC3);
-  else mat_copy = mat.clone();
-  for (unsigned int i = 0; i < mat_copy.rows; ++i)
-  {
-    cv::Vec3f *p = mat_copy.ptr<cv::Vec3f>(i);
-    for (unsigned int j = 0; j < mat_copy.cols; ++j)
-    {
-      p[j][0] = (p[j][0] - mean[0]) * scale[0];
-      p[j][1] = (p[j][1] - mean[1]) * scale[1];
-      p[j][2] = (p[j][2] - mean[2]) * scale[2];
-    }
-  }
-  return mat_copy;
-}
+// cv::Mat MixformerTRT::normalize(const cv::Mat &mat, const float mean[3], const float scale[3])
+// {
+//   cv::Mat mat_copy;
+//   if (mat.type() != CV_32FC3) mat.convertTo(mat_copy, CV_32FC3);
+//   else mat_copy = mat.clone();
+//   for (unsigned int i = 0; i < mat_copy.rows; ++i)
+//   {
+//     cv::Vec3f *p = mat_copy.ptr<cv::Vec3f>(i);
+//     for (unsigned int j = 0; j < mat_copy.cols; ++j)
+//     {
+//       p[j][0] = (p[j][0] - mean[0]) * scale[0];
+//       p[j][1] = (p[j][1] - mean[1]) * scale[1];
+//       p[j][2] = (p[j][2] - mean[2]) * scale[2];
+//     }
+//   }
+//   return mat_copy;
+// }
 
-void MixformerTRT::normalize(const cv::Mat &inmat, cv::Mat &outmat, float mean, float scale)
-{
-  outmat = this->normalize(inmat, mean, scale);
-}
+// void MixformerTRT::normalize(const cv::Mat &inmat, cv::Mat &outmat, float mean, float scale)
+// {
+//   outmat = this->normalize(inmat, mean, scale);
+// }
 
-void MixformerTRT::normalize_inplace(cv::Mat &mat_inplace, float mean, float scale)
-{
-  if (mat_inplace.type() != CV_32FC3) mat_inplace.convertTo(mat_inplace, CV_32FC3);
-  this->normalize(mat_inplace, mat_inplace, mean, scale);
-}
+// void MixformerTRT::normalize_inplace(cv::Mat &mat_inplace, float mean, float scale)
+// {
+//   if (mat_inplace.type() != CV_32FC3) mat_inplace.convertTo(mat_inplace, CV_32FC3);
+//   this->normalize(mat_inplace, mat_inplace, mean, scale);
+// }
 
-void MixformerTRT::normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3])
-{
-  if (mat_inplace.type() != CV_32FC3) mat_inplace.convertTo(mat_inplace, CV_32FC3);
-  for (unsigned int i = 0; i < mat_inplace.rows; ++i)
-  {
-    cv::Vec3f *p = mat_inplace.ptr<cv::Vec3f>(i);
-    for (unsigned int j = 0; j < mat_inplace.cols; ++j)
-    {
-      p[j][0] = (p[j][0] - mean[0]) * scale[0];
-      p[j][1] = (p[j][1] - mean[1]) * scale[1];
-      p[j][2] = (p[j][2] - mean[2]) * scale[2];
-    }
-  }
-}
+// void MixformerTRT::normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3])
+// {
+//   if (mat_inplace.type() != CV_32FC3) mat_inplace.convertTo(mat_inplace, CV_32FC3);
+//   for (unsigned int i = 0; i < mat_inplace.rows; ++i)
+//   {
+//     cv::Vec3f *p = mat_inplace.ptr<cv::Vec3f>(i);
+//     for (unsigned int j = 0; j < mat_inplace.cols; ++j)
+//     {
+//       p[j][0] = (p[j][0] - mean[0]) * scale[0];
+//       p[j][1] = (p[j][1] - mean[1]) * scale[1];
+//       p[j][2] = (p[j][2] - mean[2]) * scale[2];
+//     }
+//   }
+// }
 
-float MixformerTRT::fp16_to_float(half_float::half value)
-{
-    return static_cast<float>(value);
-}
+// float MixformerTRT::fp16_to_float(float value)
+// {
+//     return static_cast<float>(value);
+// }
 
 
 

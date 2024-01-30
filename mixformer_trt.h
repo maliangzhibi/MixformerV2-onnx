@@ -55,9 +55,9 @@ struct Config {
     // std::vector<float> window;
     float template_factor = 2.0;
     float search_factor = 4.5; // 5.0
-    float template_size = 112; //192
-    float search_size = 224; // 384
-    float stride = 16;
+    int template_size = 112; //192
+    int search_size = 224; // 384
+    int stride = 16;
     int feat_sz = 14; // 24
     int update_interval = 200;
 };
@@ -69,7 +69,7 @@ enum
 
 class MixformerTRT {
 
-public:
+private:
     Logger gLogger;
 
     const char* INPUT_BLOB_IMGT_NAME = "img_t";
@@ -104,14 +104,69 @@ public:
         {1, 3, 224, 224} // x
     };
 
-    half_float::half *input_imt = nullptr;
-    half_float::half *input_imot = nullptr;
-    half_float::half *input_imsearch = nullptr;
-    half_float::half *output_pred_boxes = nullptr;
-    half_float::half *output_pred_scores = nullptr;
+    // Define FP32 mean and scale values
+    const float mean_vals[3] = {0.485f * 255.f, 0.456f * 255.f, 0.406f * 255.f};  // RGB
+    const float norm_vals[3] = {1 / 0.229f / 255.f, 1 / 0.224f / 255.f, 1 / 0.225f / 255.f};
 
+    // Define FP16 mean and scale values
+    // float means_fp16[3] = {float(0.406*255), float(0.485*255), float(0.456*255)};
+    // float norms_fp16[3] = {float(1/(0.225*255)), float(1/(0.229*255)), float(1/(0.224*255))};
+
+    // const float means[3]  = {0.485, 0.456, 0.406}; // BGR
+    // const float norms[3] = {0.229, 0.224, 0.225}; // BGR
+    float max_pred_score = -1.f;
+    float max_score_decay = 1.f;
+
+    cv::Mat z_patch; // template
+    cv::Mat oz_patch; // online_template
+    cv::Mat max_oz_patch; // online max template
+
+    DrOBB object_box;
+    int frame_id = 0;
+
+    int output_pred_boxes_size = 1;
+    int output_pred_scores_size = 1;
+
+
+    float *input_imt = nullptr;
+    float *input_imot = nullptr;
+    float *input_imsearch = nullptr;
+    float *output_pred_boxes = nullptr;
+    float *output_pred_scores = nullptr;
+
+    // 数据尺度的定义
+    static const int INPUT_IMT_W = 112;
+    static const int INPUT_IMOT_W = 112;
+    static const int INPUT_IMSEARCH_W = 224;
+
+    static const int INPUT_IMT_H = 112;
+    static const int INPUT_IMOT_H = 112;
+    static const int INPUT_IMSEARCH_H = 224;
+
+    // float* blob_imt = nullptr;
+    // float* blob_imot = nullptr;
+    // float* blob_imsearch = nullptr;
+
+// protected:
+//     const unsigned int num_threads; // initialize at runtime.
+
+private:
+
+    // void transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x);
+    void transform(cv::Mat &mat_z, cv::Mat &mat_oz, cv::Mat &mat_x);
+
+    void map_box_back(DrBBox &pred_box, float resize_factor);
+
+    void clip_box(DrBBox &box, int height, int wight, int margin);
+
+    void cal_bbox(float *boxes_ptr, float * scores_ptr, DrBBox &pred_box, float &max_score, float resize_factor);
+
+    void sample_target(const cv::Mat &im, cv::Mat &croped, DrBBox target_bb, float search_area_factor, int output_sz, float &resize_factor);
+
+    // float fp16_to_float(float value);
 
 public:
+
     MixformerTRT(std::string &engine_name);
 
     ~MixformerTRT(); //override
@@ -126,76 +181,41 @@ public:
     // config static
     Config cfg; 
 
-// protected:
-//     const unsigned int num_threads; // initialize at runtime.
+    // cv::Mat normalize(const cv::Mat &mat, float mean, float scale);
 
-private:
+    // cv::Mat normalize(const cv::Mat &mat, const float mean[3], const float scale[3]);
 
-    void transform(const cv::Mat &mat_z, const cv::Mat &mat_oz, const cv::Mat &mat_x);
+    // void normalize(const cv::Mat &inmat, cv::Mat &outmat, float mean, float scale);
 
-    void map_box_back(DrBBox &pred_box, float resize_factor);
+    // void normalize_inplace(cv::Mat &mat_inplace, float mean, float scale);
 
-    void clip_box(DrBBox &box, int height, int wight, int margin);
+    // void normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3]);
 
-    void cal_bbox(half_float::half *boxes_ptr, half_float::half * scores_ptr, DrBBox &pred_box, float &max_score, float resize_factor);
-
-    void sample_target(const cv::Mat &im, cv::Mat &croped, DrBBox target_bb, float search_area_factor, int output_sz, float &resize_factor);
-
-    float fp16_to_float(half_float::half value);
-
-public:
-
-    cv::Mat normalize(const cv::Mat &mat, float mean, float scale);
-
-    cv::Mat normalize(const cv::Mat &mat, const float mean[3], const float scale[3]);
-
-    void normalize(const cv::Mat &inmat, cv::Mat &outmat, float mean, float scale);
-
-    void normalize_inplace(cv::Mat &mat_inplace, float mean, float scale);
-
-    void normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3]);
+    // void normalize_inplace(cv::Mat &mat_inplace, const float mean[3], const float scale[3]);
 
     void deserialize_engine(std::string &engine_name);
 
     void infer(
-        half_float::half  *input_imt,
-        half_float::half  *input_imot,
-        half_float::half  *input_imsearch,
-        half_float::half  *output_pred_boxes,
-        half_float::half  *output_pred_scores,
+        float  *input_imt,
+        float  *input_imot,
+        float  *input_imsearch,
+        float  *output_pred_boxes,
+        float  *output_pred_scores,
         cv::Size input_imt_shape,
+        cv::Size input_imot_shape,
         cv::Size input_imsearch_shape);
     
-    half_float::half* blob_from_image_half(cv::Mat& img);
+    void blob_from_image_half(cv::Mat& img, float* output_data);
+    void blob_from_image_half(cv::Mat& img, cv::Mat &imgot, cv::Mat &imgx);
+    // void convertMatToFP16(cv::Mat& mat, float* fp16Data);
 
-private:
-    const float means[3]  = {0.406*255, 0.485*255, 0.456*255}; // BGR
-    const float norms[3] = {1/(0.225*255), 1/(0.229*255), 1/(0.224*255)}; // BGR
-    float max_pred_score = -1.f;
-    float max_score_decay = 1.f;
+    // void preprocessor_img(cv::Mat &img, float* output_data);
+    // void preprocessor_img(cv::Mat &img);
+    // void preprocessor_img(cv::Mat& img, cv::Mat &imgot, cv::Mat &imgx);
+    void half_norm(const cv::Mat &img, float* input_data);
 
-    cv::Mat z_patch; // template
-    cv::Mat oz_patch; // online_template
-    cv::Mat max_oz_patch; // online max template
-
-    DrOBB object_box;
-    int frame_id = 0;
-
-    int output_pred_boxes_size = 1;
-    int output_pred_scores_size = 1;
-
-    // 数据尺度的定义
-    static const int INPUT_IMT_W = 112;
-    static const int INPUT_IMOT_W = 112;
-    static const int INPUT_IMSEARCH_W = 224;
-
-    static const int INPUT_IMT_H = 112;
-    static const int INPUT_IMOT_H = 112;
-    static const int INPUT_IMSEARCH_H = 224;
-
-    // half_float::half* blob_imt = nullptr;
-    // half_float::half* blob_imot = nullptr;
-    // half_float::half* blob_imsearch = nullptr;
+// private:
+    
 };
 
 #endif 

@@ -65,7 +65,7 @@ class Preprocessor_wo_mask(object):
 
     def process(self, img_arr: np.ndarray):
         """初始化预处理图像. 
-           需要注意的是: 如果按照如下方式处理则无法通过。原因是transpose之后的数据部连续，需要将其变为连续的数
+           需要注意的是: 如果按照如下方式处理则无法通过。原因是transpose之后的数据不连续，需要将其变为连续的数
            据，所以需要先进行ascontiguousarray
            '''
             img_tensor = torch.tensor(img_arr).cuda().float().permute((2,0,1)).unsqueeze(dim=0)
@@ -91,6 +91,7 @@ class Preprocessor_wo_mask(object):
         # return im
         
         # 第二种方法 
+        # img_arr = cv2.cvtColor(img_arr, cv2.COLOR_RGB2BGR)
         img_tensor = torch.tensor(img_arr).cuda().float().permute((2,0,1)).unsqueeze(dim=0)
         img_tensor_norm = ((img_tensor / 255.0) - self.mean) / self.std  # (1,3,H,W)
         return img_tensor_norm.contiguous()
@@ -151,14 +152,14 @@ class MFTrackerTRT:
         x_patch_arr, resize_factor, x_amask_arr = self.sample_target(image, self.state, self.search_factor,
                                                                 output_sz=self.search_size)  # (x1, y1, w, h)
         search = self.preprocessor.process(x_patch_arr)
-        print(f">>>search: {search.shape}")
+        # print(f">>>search: {search.shape}")
         # compute trt output prediction
         trt_outputs = self.mixformer_tracker.infer(self.template, self.online_template, search)
         # print(f">>> lenght trt_outputs: {trt_outputs}")
         pred_boxes = trt_outputs[0]
         pred_score = trt_outputs[1]
 
-        # print(f">>> self.template.data_ptr: {self.template.data_ptr()}")
+        print(f">>> trt_outputs: {pred_boxes, pred_score}")
         # Baseline: Take the mean of all pred boxes as the final result
         pred_box = (pred_boxes.mean(dim=0) * self.search_size / resize_factor).tolist()  # (cx, cy, w, h) [0,1]
         # get the final box result
@@ -318,7 +319,7 @@ if __name__ == '__main__':
     frame_id = 0
     total_time = 0
     for frame in get_frames(Tracker.video_name):
-        print(f"frame shape {frame.shape} {type(frame)}")
+        # print(f"frame shape {frame.shape} {type(frame)}")
         tic = cv2.getTickCount()
         if first_frame:
             x, y, w, h = cv2.selectROI(video_name, frame, fromCenter=False)
