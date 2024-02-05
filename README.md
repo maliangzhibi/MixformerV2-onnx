@@ -13,7 +13,7 @@ At the same time, a pytrt and pyort version were also provided, which reached 43
 
 
 # 1. How to build and run it?
-Prerequisites: First, download the source code of [onnx](https://github.com/microsoft/onnxruntime) and compile it. For details, see lite.ai.toolkit. Put the header file into the onnxruntime folder and put the compiled .so file into the lib folder. The above two folders are located in Mixformerv2-onnx. However, the above steps are not required for tensorRT inference, you only need to configure TensorRT.
+Prerequisites: First, download the source code of [onnx v1.10](https://github.com/microsoft/onnxruntime) and compile it. For details, see lite.ai.toolkit. Geting the header file and putting into the onnxruntime folder, the compiled .so file should put into the lib folder. The above two folders are located in Mixformerv2-onnx. However, the above steps are not required for tensorRT inference, you only need to configure TensorRT.
 ## modify your own CMakeList.txt
 modify onnx path as yours
 
@@ -29,7 +29,7 @@ $ cd /home/code/Mixformerv2-onnx
 $ ./mixformer-onnx [model_path] [videopath(file or camera)]
 ```
 
-# 2. MixformerV2 TensorRT version inference in CPP and python
+# 2. MixformerV2 TensorRT version inference with CPP and python
 Assume that you have configured Tensorrt, use onnx2trt to convert the onnx model to engine on your GPU platform, and then start compilation and execution.
 
 ## cpp version 
@@ -40,7 +40,7 @@ $ mkdir build && cd build
 $ cmake .. && make
 & ./mixformer-trt ../model/mixformer_v2_sim.engine ../target.mp4
 ```
-## python trt version
+## python version
 Modify the video path in Mixformerv2-onnx/mixformer-pytrt/mf_tracker_trt.py，and mkdir model file_dir, then download the onnx file and put onnx file into file_dir.
 ```
 $ cd Mixformerv2-onnx
