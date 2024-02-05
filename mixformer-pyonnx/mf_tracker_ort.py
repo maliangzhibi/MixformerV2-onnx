@@ -64,13 +64,13 @@ class Preprocessor_wo_mask(object):
         return img_tensor_norm.contiguous()
 
 class MFTrackerORT:
-    def __init__(self) -> None:
+    def __init__(self, model_path, fp16=False) -> None:
         self.debug = True
         self.gpu_id = 0
         self.providers = ["CUDAExecutionProvider"]
         self.provider_options = [{"device_id": str(self.gpu_id)}]
-        self.model_path = "model/mixformer_v2_sim.onnx"
-        # self.video_name = "/home/nhy/lsm/dataset/target.mp4"
+        self.model_path = model_path
+        self.fp16 = fp16
         
         self.init_track_net()
         self.preprocessor = Preprocessor_wo_mask()
@@ -184,6 +184,8 @@ class MFTrackerORT:
         return torch.stack([cx_real - 0.5 * w, cy_real - 0.5 * h, w, h], dim=-1)
     
     def to_numpy(self, tensor):
+        if self.fp16:
+            return tensor.detach().cpu().half().numpy() if tensor.requires_grad else tensor.cpu().half().numpy()
         return tensor.detach().cpu().numpy() if tensor.requires_grad else tensor.cpu().numpy()
     
     def sample_target(self, im, target_bb, search_area_factor, output_sz=None, mask=None):
@@ -269,7 +271,8 @@ class MFTrackerORT:
         
 if __name__ == '__main__':
     print("测试")
-    Tracker = MFTrackerORT()
+    model_path = "model/mixformer_v2_sim.onnx"
+    Tracker = MFTrackerORT(model_path = model_path, fp16=False)
     first_frame = True
     Tracker.video_name = "/home/nhy/lsm/dataset/target.mp4"
 
@@ -294,8 +297,6 @@ if __name__ == '__main__':
             first_frame = False
         else:
             state = Tracker.track(frame)
-            # draw_trace(frame, Tracker.trace_list)
-            # draw_circle(frame, Tracker.state['target_pos'])
             frame_id += 1
 
             cv2.imshow('Tracking', frame)

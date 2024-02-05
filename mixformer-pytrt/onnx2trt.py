@@ -61,8 +61,14 @@ def export_engine(f_onnx, half=False, workspace=4, verbose=False, prefix="Tensor
     """使用onnx_parser解析onnx模型, 编译得到engine进行推理
 
     Args:
-        f_onnx (_type_): _description_
+        f_onnx (str): ONNX文件的路径
+        half (bool, optional): 是否使用FP16模式. 默认为False.
+        workspace (int, optional): 最大工作空间大小(GB). 默认为4.
+        verbose (bool, optional): 是否启用详细日志. 默认为False.
+        prefix (str, optional): 日志前缀. 默认为"TensorRT".
     """
+    f = "model/mixformer_v2_sim.engine"
+
     assert Path(f_onnx).exists(), f'NOt found ONNX file: {f_onnx}' 
     model = onnx.load(f_onnx)
     onnx.checker.check_model(model)
@@ -70,13 +76,15 @@ def export_engine(f_onnx, half=False, workspace=4, verbose=False, prefix="Tensor
     logger = trt.Logger(trt.Logger.INFO)
     if verbose:
         logger.min_serverity = trt.Logger.Serverity.VERBOSE
-    # trt.init_libnvinfer_plugins(logger, namespace='')
 
     builder = trt.Builder(logger)
     config = builder.create_builder_config()
     config.max_workspace_size = workspace * 1 << 30
-    # if bUseINT8Mode:
-    #     config.int8_mode = bUseINT8Mode
+    
+    print(f'{prefix} building FP{16 if builder.platform_has_fast_fp16 and half else 32} engine as {f}')
+    if builder.platform_has_fast_fp16 and half:
+        print(f"转换为FP16模型.")
+        config.set_flag(trt.BuilderFlag.FP16)
 
     flag = (1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
 
@@ -94,25 +102,14 @@ def export_engine(f_onnx, half=False, workspace=4, verbose=False, prefix="Tensor
         
     profile = builder.create_optimization_profile()
     config.add_optimization_profile(profile)
-
-    f = "model/mixformer_v2_sim.engine"
-
-    LOGGER.info(f'{prefix} building FP{16 if builder.platform_has_fast_fp16 and half else 32} engine as {f}')
-    if builder.platform_has_fast_fp16 and half:
-        config.set_flag(trt.BuilderFlag.FP16)
-        
+     
     engine = builder.build_serialized_network(network, config)
     with open(f, 'wb') as t:
         t.write(engine)
-
-    # with open(f, 'rb') as model:
-    #     builder.build_serialized_network(network, config)
-
-    # return f, None
-
     
 def main():
-    export_engine(f_onnx=Path('model/mixformer_v2_sim.onnx'), half=True, verbose=False)
+    export_engine(f_onnx=Path('model/mixformer_v2_sim.onnx'), half=False, verbose=False)
+    # export_engine(f_onnx=Path('model/mixformer_v2_sim_fp16.onnx'), half=True, verbose=False)
 
 if __name__ == '__main__':
     main()

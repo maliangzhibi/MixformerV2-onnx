@@ -27,7 +27,6 @@ MixformerTRT::MixformerTRT(std::string &engine_name)
     {
         this->output_pred_boxes_size *= out_dims_0.d[j];
     }
-    // this->output_pred_boxes = new half_float::half[this->output_pred_boxes_size];
 
     auto out_dims_1 = this->engine->getBindingDimensions(4);
     for(int j=0; j < out_dims_1.nbDims; j++)
@@ -37,7 +36,6 @@ MixformerTRT::MixformerTRT(std::string &engine_name)
 
     this->output_pred_boxes = new float[this->output_pred_boxes_size];
     this->output_pred_scores = new float[this->output_pred_scores_size];
-    
 }
 
 MixformerTRT::~MixformerTRT(){
@@ -257,7 +255,7 @@ const DrOBB &MixformerTRT::track(const cv::Mat &img)
 
     this->max_pred_score = this->max_pred_score * this->max_score_decay;
     // update template
-    if (pred_score > 0.5 && pred_score > this->max_pred_score)
+    if (pred_score > 0.9 && pred_score > this->max_pred_score)
     {
       this->sample_target(img, this->max_oz_patch, this->state, this->cfg.template_factor, this->cfg.template_size, resize_factor);
       this->max_pred_score = pred_score;
@@ -279,7 +277,7 @@ void MixformerTRT::cal_bbox(float *boxes_ptr, float * scores_ptr, DrBBox &pred_b
     auto cy = boxes_ptr[1];
     auto w = boxes_ptr[2];
     auto h = boxes_ptr[3];
-    std::cout << "cal_bbox cx cy w h "<< cx << " " << cy << " " << w << " " << h << std::endl;
+    // std::cout << "cal_bbox cx cy w h "<< cx << " " << cy << " " << w << " " << h << std::endl;
     cx = cx * this->cfg.search_size / resize_factor;
     cy = cy * this->cfg.search_size / resize_factor;
     w = w * this->cfg.search_size / resize_factor;

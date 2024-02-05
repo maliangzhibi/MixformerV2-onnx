@@ -42,7 +42,8 @@ class MixformerNvinfer:
             LOGGER.info(f"Error ENGINE_NAME: {engine_name}")
             sys.exit(1)
         
-        LOGGER.info(f"loading {self.engine_path} for TensorRT inference.")
+        # LOGGER.info(f"loading {self.engine_path} for TensorRT inference.")
+        print(f"loading {self.engine_path} for TensorRT inference.")
         self.check_version(trt.__version__, '7.0.0', hard=True)
 
         # 定义绑定数据
@@ -70,10 +71,10 @@ class MixformerNvinfer:
         for i in range(self.model.num_bindings):
             name = self.model.get_binding_name(i)
             dtype = trt.nptype(self.model.get_binding_dtype(i))
-            LOGGER.info(f"name: {name}")
+            # LOGGER.info(f"name: {name, dtype}")
+            print(f"name: {name, dtype}")
             # input
-            if self.model.binding_is_input(i): 
-                # print(f">>>input name: {name} {self.model.get_binding_shape(i)} {dtype}")
+            if self.model.binding_is_input(i):
                 if -1 in tuple(self.model.get_binding_shape(i)):
                     dynamic = True
                     self.context.set_binding_shape(i, tuple(self.model.get_profile_shape(0,1)[2]))

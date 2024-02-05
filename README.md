@@ -3,19 +3,17 @@ MixFormerV2: Efficient Fully Transformer Tracking.
 
 [official pytorch](https://github.com/MCG-NJU/MixFormerV2.git)
 
-Here, the c++ version of onnx mixformerv2 tracking algorithm is provided, and the fps reaches about 300fps on the 3080-laptop gpu.
+Here, the mixformerv2 tracking algorithm with onnx and trt is provided, and the fps reaches about 500+fps on the 3080-laptop gpu.
 
-At the same time, a pytrt version was also provided, which reached 430fps on the 3080-laptop gpu.
+At the same time, a pytrt and pyort version were also provided, which reached 430fps on the 3080-laptop gpu.
 # 0. Download model
 [mixformer_v2.onnx](https://www.123pan.com/s/6iArVv-FYAJ.html)
 
 [mixformer_v2_sim.onnx](https://www.123pan.com/s/6iArVv-mcAJ.html)
 
-[mixformer_v2_sim.engine](https://www.123pan.com/s/6iArVv-ocAJ.html)
-
 
 # 1. How to build and run it?
-Prerequisites: First, download the source code of onnx and compile it. For details, see lite.ai.toolkit. Put the header file into the onnxruntime folder and put the compiled .so file into the lib folder. The above two folders are located in Mixformerv2-onnx. However, the above steps are not required for tensorRT inference, you only need to configure TensorRT.
+Prerequisites: First, download the source code of [onnx](https://github.com/microsoft/onnxruntime) and compile it. For details, see lite.ai.toolkit. Put the header file into the onnxruntime folder and put the compiled .so file into the lib folder. The above two folders are located in Mixformerv2-onnx. However, the above steps are not required for tensorRT inference, you only need to configure TensorRT.
 ## modify your own CMakeList.txt
 modify onnx path as yours
 
